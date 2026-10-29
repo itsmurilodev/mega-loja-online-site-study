@@ -1,100 +1,112 @@
-# MegaLoja Online - Click & Collect
+# MegaLoja Online • Sistema Central de Click & Collect
 
-Projeto acadêmico desenvolvido para a disciplina de **Fundamentos de Engenharia de Software**, da Universidade LaSalle.
+Projeto desenvolvido para a disciplina de **Laboratório de Engenharia de Software** da **Universidade LaSalle (Unilasalle)** — **Trabalho G2**.
 
-O trabalho tem como objetivo aplicar conceitos de levantamento de requisitos, modelagem de sistemas e desenvolvimento de MVP a partir de um cenário de varejo digital. O sistema proposto é um serviço de **Click & Collect** para a MegaLoja Online, permitindo que clientes comprem produtos pela plataforma digital e retirem seus pedidos em uma loja física.
+O objetivo do sistema é unificar o ambiente de compras digitais ao estoque das lojas físicas, permitindo que o cliente compre pelo site e retire o produto diretamente em uma filial de sua preferência com frete grátis, validação segura por QR Code e integração em tempo real com estoque e operadora financeira.
 
-## Objetivo do Projeto
+---
 
-Desenvolver uma solução que integre os canais online e físico da MegaLoja Online, oferecendo ao cliente a opção de retirar o pedido em loja, com controle de estoque, status do pedido, geração de código de retirada e notificações.
+## 1. Integrantes e Papéis no Projeto (Metodologia SCRUM)
 
-A proposta busca resolver problemas como:
+- **Murilo Alves** — *Scrum Master*
+- **João Vitor G. Valli** — *Product Owner (PO)*
+- **Leonardo Quadros** — *Desenvolvedor*
+- **Guilherme Reis** — *Desenvolvedor*
+- **Júlia Normando** — *Analista de Requisitos / Testes*
 
-- demora nas entregas domiciliares;
-- alto custo logístico;
-- falta de integração entre loja física e e-commerce;
-- baixa flexibilidade para o cliente escolher a forma de recebimento.
+---
 
-## Disciplina
+## 2. Atores do Sistema
 
-Este repositório será utilizado para organizar e versionar os artefatos do trabalho da faculdade na disciplina de **Fundamentos de Engenharia de Software**.
+- **Ator 1: Cliente** — Usuário final que realiza a compra, seleciona a filial para retirada, recebe o QR Code e busca o produto na loja física.
+- **Ator 2: Operador da Loja** — Funcionário responsável por receber o pedido no painel local, separar e embalar o produto no estoque físico e validar a entrega ao cliente.
+- **Ator 3: Sistema de Estoque (S.E.)** — Ator externo/suporte que monitora e fornece a disponibilidade de itens por loja em tempo real e registra a reserva/baixa física.
+- **Ator 4: Operadora de Cartão** — Serviço externo responsável por receber os dados do cartão do cliente, processar a transação financeira em tempo real e retornar o status da cobrança (aprovado ou recusado).
 
-## Etapas do Trabalho
+---
 
-### Trabalho 01 - Levantamento de Requisitos
+## 3. Casos de Uso Detalhados (Sprint G2)
 
-Nesta etapa foi feita a elicitação dos requisitos do sistema Click & Collect. Foram analisados:
+### UC003 - Finalizar Compra
+- **Ator Principal:** Cliente
+- **Relação de Inclusão (`<<include>>`):** `UC002 - Consultar Disponibilidade` obrigatória no S.E.
+- **Regras:** Aplica frete R$ 0,00, processa pagamento na Operadora de Cartão (RF003), reserva item no estoque e gera pedido com status inicial `Aguardando Separação`.
+- **Fluxos Alternativos:**
+  - `5.1.5.1 Item indisponível na loja selecionada`: Alerta o cliente e sugere outra filial ou entrega domiciliar.
+  - `5.1.5.2 Pagamento recusado`: Informa falha na transação e solicita nova forma de pagamento.
+  - `5.3.5.1 Retirada por terceiro autorizado`: Permite informar nome e CPF de quem retirará a encomenda.
 
-- visão do produto;
-- objetivos de negócio;
-- problemas identificados;
-- stakeholders;
-- entrevistas com cliente e funcionário da loja;
-- brainstorming;
-- requisitos funcionais;
-- requisitos não funcionais;
-- atores do sistema;
-- casos de uso;
-- questionário;
-- matriz de rastreabilidade.
+### UC005 - Separar Pedido
+- **Ator Principal:** Operador da Loja (Perfil Retaguarda)
+- **Regras:** Painel local com ordenação de pedidos pendentes, conferência de código de barras ou digitação manual de SKU (Fluxo 5.2.5.2) e embalagem.
+- **Conclusão:** Status atualizado para `Pronto para Retirada`, geração automática do QR Code criptografado (UC006 / RNF003) e notificação ao cliente.
+- **Ponto de Extensão (`<<extend>>`):** `UC008 - Registrar Ruptura (Falta de Item)`.
 
-Entre os principais requisitos levantados estão:
+### UC008 - Registrar Ruptura (Falta de Item)
+- **Ator Principal:** Operador da Loja
+- **Regra:** Disparado quando o item físico não se encontra na prateleira (Fluxo 5.2.5.1). O pedido é cancelado (`cancelado_ruptura`), a solicitação de estorno é emitida à operadora de cartão e o estoque da filial é corrigido para zero.
 
-- selecionar retirada em loja durante o checkout;
-- consultar estoque por loja em tempo real;
-- escolher a loja física para retirada;
-- gerar QR Code ou código numérico de retirada;
-- notificar o cliente quando o pedido estiver pronto;
-- permitir que funcionários atualizem o status do pedido;
-- cancelar automaticamente pedidos não retirados.
+### UC007 - Validar Retirada
+- **Ator Principal:** Operador da Loja / Atendente de Balcão
+- **Regras:** Escaneamento do QR Code com conferência de documento físico com foto (titular ou terceiro previamente cadastrado).
+- **Fluxo Alternativo 5.3.5.2 (QR Code ilegível/expirado):** Busca manual de contingência por CPF e número do pedido.
+- **Conclusão:** Status final `Entregue ao Cliente` e emissão automática de **Cupom de Desconto de 5%** para compras na loja física (Passo 8).
 
-### Trabalho 02 - Contexto e Fluxo de Negócio
+---
 
-A segunda etapa representa o contexto do sistema e o fluxo de negócio envolvido no Click & Collect.
+## 4. Requisitos do Sistema
 
-Foram definidos os principais atores:
+### Requisitos Funcionais (RFs)
+- **RF001:** Seleção de Filial para Retirada durante o checkout.
+- **RF002:** Consulta de Disponibilidade de Estoque em Tempo Real (UC002).
+- **RF003:** Processamento de Pagamento Online com frete gratuito.
+- **RF004:** Notificação e Envio de QR Code seguro após separação.
+- **RF005:** Painel de Separação de Pedidos com leitura de código de barras/SKU.
+- **RF006:** Registro de Ruptura de Estoque com cancelamento e estorno (UC008).
+- **RF007:** Validação Presencial da Retirada (QR Code e baixa definitiva).
 
-- Cliente;
-- Funcionário da loja;
-- Gerente da loja;
-- Sistema de e-commerce;
-- Sistema de estoque;
-- Sistema de notificação;
-- Transportadora como stakeholder indireto.
+### Requisitos Não Funcionais (RNFs)
+- **RNF001:** Tempo de Resposta e Sincronização $\le$ 60 segundos.
+- **RNF002:** Segurança e Criptografia (HTTPS/SSL e dados sensíveis protegidos).
+- **RNF003:** Autenticidade do Voucher (QR Code assinado/criptografado contra fraudes).
+- **RNF004:** Operação Tolerante a Falhas / Modo Offline (contingência e cache local).
+- **RNF005:** Acessibilidade do Painel (responsivo para coletores portáteis e terminais web).
 
-Também foram elaborados artefatos para visualizar as interações entre cliente, loja, sistemas internos e sistemas externos.
+---
 
-### Trabalho 03 - Visão do Sistema e MVP
+## 5. Arquitetura BCE (Boundary, Control, Entity)
 
-A terceira etapa tem como foco consolidar os artefatos anteriores em um documento de visão e iniciar o desenvolvimento de um MVP.
+Conforme modelado no Diagrama de Sequência do Trabalho G2:
+- **Boundary (Fronteira):** `InterfaceCheckout` e `PainelBalcao` (`front.html`).
+- **Control (Controle):** `ControladorPedido` (`backend/services.py`).
+- **Entity / Sistemas Externos:** `SistemaEstoqueService` (S.E.) e `OperadoraCartaoService` (`backend/services.py`).
 
-O MVP do sistema Click & Collect deve contemplar:
+---
 
-- escolha de requisitos funcionais críticos;
-- criação de wireframes de baixa e alta fidelidade;
-- implementação das interfaces;
-- desenvolvimento de backend;
-- integração com banco de dados.
+## 6. Como Executar o Projeto
 
-Os requisitos sugeridos para implementação incluem:
+### Passo 1: Iniciar o Backend
 
-- seleção da modalidade de entrega;
-- escolha da loja física;
-- geração de código de retirada;
-- notificação de status do pedido.
+```bash
+python3 backend/app.py
+```
+O servidor iniciará em `http://127.0.0.1:5000`.
 
-## Como o Projeto Será Desenvolvido
+### Passo 2: Acessar a Aplicação
 
-O desenvolvimento será organizado utilizando GitHub para controle de versão e acompanhamento da evolução do trabalho.
+Abra o arquivo `front.html` diretamente no navegador ou via servidor local (ex: Live Server ou `python3 -m http.server 3000`).
 
-A ideia é manter no repositório:
+### Passo 3: Demonstrar os Fluxos da Sprint
 
-- documentos das etapas do trabalho;
-- requisitos e artefatos de análise;
-- diagramas e modelos;
-- wireframes;
-- código-fonte do MVP;
-- instruções de execução;
-- histórico de alterações.
-
-O projeto será desenvolvido de forma incremental, partindo da análise e documentação dos requisitos até a criação de uma versão funcional mínima do sistema.
+1. **Visão Cliente:**
+   - Escolha a filial (ex: Canoas Centro).
+   - Selecione um produto com estoque e clique em *Retirar na Loja*.
+   - No checkout, preencha os dados do titular e opcionalmente marque *Retirada por Terceiro Autorizado* (Fluxo 5.3.5.1).
+   - É possível testar a simulação de recusa de cartão (Fluxo 5.1.5.2) marcando a opção indicada.
+   - Conclua a compra: o comprovante será exibido e o status ficará como `Aguardando Separação` com QR Code bloqueado.
+2. **Visão Balcão / Operador:**
+   - No topo, alterne para *Balcão / Operador*.
+   - Em *UC005 Separação de Pedidos*, selecione o pedido, clique em *Bipar* para ler o SKU/código de barras e clique em *Concluir Embalagem*.
+   - Volte à visão do cliente: o QR Code estará liberado com voucher único assinado!
+   - Para demonstrar o ponto de extensão *UC008*, clique em *Registrar Indisponibilidade* na esteira de separação.
+   - Em *UC007 Validação Presencial*, escaneie o voucher ou faça busca manual por CPF, confira o documento do recebedor e confirme a entrega: o sistema registra a baixa `Entregue ao Cliente` e entrega o cupom de 5% de desconto!
