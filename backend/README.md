@@ -33,7 +33,6 @@ Backend desenvolvido para a disciplina de **Laboratório de Engenharia de Softwa
   - Validação no balcão por leitura de QR Code ou busca manual por CPF/Pedido (Fluxo 5.3.5.2).
   - Conferência de documento físico (titular ou terceiro autorizado cadastrado).
   - Status final: `entregue_cliente`.
-  - Emissão de cupom de 5% de desconto para compras na loja física (Passo 8).
 
 ---
 
@@ -73,5 +72,5 @@ http://127.0.0.1:5000
 | `POST` | `/api/orders` | **UC003** | Finalizar compra, reservar estoque e processar cartão |
 | `POST` | `/api/orders/{id}/separate` | **UC005** | Registrar separação com leitura de SKU e liberar QR Code |
 | `POST` | `/api/orders/{id}/rupture` | **UC008** | Registrar ruptura de estoque e solicitar estorno |
-| `POST` | `/api/orders/validate-pickup` | **UC007** | Validar retirada presencial e emitir cupom de 5% |
+| `POST` | `/api/orders/validate-pickup` | **UC007** | Validar retirada presencial e registrar entrega |
 | `POST` | `/api/orders/{id}/expire` | Abandono | Cancelar por não-comparecimento (7 dias) e devolver estoque |

@@ -42,11 +42,6 @@ def generate_pickup_code(order_id):
     return f"HV-{str(order_id).zfill(4)}-{salt[:4]}-{signature}"
 
 
-def generate_discount_coupon():
-    """Gera cupom promocional de 5% para a loja fisica pos-retirada (UC007 passo 8)."""
-    return f"CLICK5-{secrets.token_hex(3).upper()}"
-
-
 def create_notification(conn, order_id, message):
     conn.execute(
         "INSERT INTO notifications (order_id, message, created_at) VALUES (?, ?, ?)",
@@ -499,7 +494,7 @@ def validate_pickup(payload):
     1. Escaneia QR Code ou executa busca manual por CPF e numero do pedido (Fluxo 5.3.5.2).
     2. Confere a documentacao fisica com o titular ou Terceiro Autorizado (Fluxo 5.3.5.1).
     3. Confirma a validacao presencial no sistema e registra baixa com status 'entregue_cliente'.
-    4. Envia confirmacao de entrega e disponibiliza cupom de 5% de desconto para compras na loja fisica (Passo 8).
+    4. Envia confirmacao de entrega e finaliza o ciclo do pedido.
     """
     order_id = payload.get("order_id")
     pickup_code = (payload.get("pickup_code") or "").strip()
@@ -554,26 +549,24 @@ def validate_pickup(payload):
             if not order["third_party_name"] or not order["third_party_cpf"]:
                 raise ApiError(403, "Nao ha terceiro autorizado cadastrado para este pedido.")
 
-        # Passo 6 & 8: Baixa final da entrega e emissao do cupom de 5% de desconto
-        coupon = generate_discount_coupon()
+        # Passo 6: Baixa final da entrega presencial
         timestamp = now_iso()
 
         conn.execute(
             """
             UPDATE orders
             SET status = 'entregue_cliente',
-                discount_coupon = ?,
                 updated_at = ?
             WHERE id = ?
             """,
-            (coupon, timestamp, order["id"]),
+            (timestamp, order["id"]),
         )
 
         quem_retirou = f"Terceiro autorizado ({order['third_party_name']})" if is_third_party else f"Titular ({order['customer_name']})"
         create_notification(
             conn,
             order["id"],
-            f"Entrega presencial confirmada para {quem_retirou}. Cupom de 5% para a loja fisica: {coupon}."
+            f"Entrega presencial confirmada para {quem_retirou}. Baixa final efetuada com sucesso."
         )
 
         return row_to_dict(get_order(conn, order["id"]))

@@ -32,7 +32,7 @@ def ensure_columns(conn):
     if "barcode" not in existing_product_cols:
         conn.execute("ALTER TABLE products ADD COLUMN barcode TEXT")
 
-    # 2. Colunas em orders (pagamento, terceiro autorizado, estorno, cupom 5%)
+    # 2. Colunas em orders (pagamento, terceiro autorizado, estorno)
     existing_order_cols = {
         row["name"] for row in conn.execute("PRAGMA table_info(orders)").fetchall()
     }

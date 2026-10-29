@@ -50,7 +50,7 @@ O objetivo do sistema é unificar o ambiente de compras digitais ao estoque das 
 - **Ator Principal:** Operador da Loja / Atendente de Balcão
 - **Regras:** Escaneamento do QR Code com conferência de documento físico com foto (titular ou terceiro previamente cadastrado).
 - **Fluxo Alternativo 5.3.5.2 (QR Code ilegível/expirado):** Busca manual de contingência por CPF e número do pedido.
-- **Conclusão:** Status final `Entregue ao Cliente` e emissão automática de **Cupom de Desconto de 5%** para compras na loja física (Passo 8).
+- **Conclusão:** Status final `Entregue ao Cliente` e encerramento do ciclo de vida da transação.
 
 ---
 
@@ -109,4 +109,4 @@ Abra o arquivo `front.html` diretamente no navegador ou via servidor local (ex: 
    - Em *UC005 Separação de Pedidos*, selecione o pedido, clique em *Bipar* para ler o SKU/código de barras e clique em *Concluir Embalagem*.
    - Volte à visão do cliente: o QR Code estará liberado com voucher único assinado!
    - Para demonstrar o ponto de extensão *UC008*, clique em *Registrar Indisponibilidade* na esteira de separação.
-   - Em *UC007 Validação Presencial*, escaneie o voucher ou faça busca manual por CPF, confira o documento do recebedor e confirme a entrega: o sistema registra a baixa `Entregue ao Cliente` e entrega o cupom de 5% de desconto!
+   - Em *UC007 Validação Presencial*, escaneie o voucher ou faça busca manual por CPF, confira o documento do recebedor e confirme a entrega: o sistema registra a baixa `Entregue ao Cliente` finalizando o ciclo com sucesso!
