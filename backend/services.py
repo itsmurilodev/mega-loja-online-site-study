@@ -1,6 +1,7 @@
 from datetime import datetime
 import hashlib
 import hmac
+import os
 import secrets
 
 try:
@@ -11,8 +12,9 @@ except ImportError:
     from database import connect_db, row_to_dict
 
 
-# Chave interna para geracao de voucher autenticado (RNF003: Autenticidade do Voucher)
-SECRET_TOKEN_KEY = "unilasalle-click-collect-2026-secret"
+# Em producao, configure PICKUP_TOKEN_SECRET com um segredo persistente e gerenciado.
+# O fallback aleatorio permite executar o prototipo local sem embutir uma chave publica no codigo.
+SECRET_TOKEN_KEY = os.environ.get("PICKUP_TOKEN_SECRET") or secrets.token_hex(32)
 
 
 class ApiError(Exception):
@@ -31,15 +33,15 @@ def generate_pickup_code(order_id):
     """
     Gera voucher autenticado com assinatura HMAC resumida para garantir
     unicidade e evitar falsificacoes na baixa presencial (RNF003).
-    Formato amigavel: HV-[ID]-XXXX-XXXX
+    Formato: HV-[ID]-[salt aleatorio de 128 bits]-[assinatura HMAC de 256 bits]
     """
-    salt = secrets.token_hex(4).upper()
+    salt = secrets.token_hex(16).upper()
     signature = hmac.new(
         SECRET_TOKEN_KEY.encode("utf-8"),
         f"{order_id}-{salt}".encode("utf-8"),
         hashlib.sha256,
-    ).hexdigest()[:4].upper()
-    return f"HV-{str(order_id).zfill(4)}-{salt[:4]}-{signature}"
+    ).hexdigest().upper()
+    return f"HV-{str(order_id).zfill(4)}-{salt}-{signature}"
 
 
 def create_notification(conn, order_id, message):
@@ -96,7 +98,7 @@ def get_order(conn, order_id):
 class OperadoraCartaoService:
     """
     Ator 4 (Sistema Externo): Operadora de Cartao
-    Responsavel por processar a cobranca financeira em tempo real (RF003).
+    Simula a aprovacao ou recusa de pagamento localmente (RF003); nao integra operadora externa.
     Permite validar tanto o fluxo basico quanto o fluxo alternativo 5.1.5.2 (Pagamento recusado).
     """
     @staticmethod
@@ -124,7 +126,7 @@ class OperadoraCartaoService:
 class SistemaEstoqueService:
     """
     Ator 3 (Sistema Externo / Entidade): Sistema de Estoque (S.E.)
-    Monitora a disponibilidade por loja fisica em tempo real (UC002) e efetua reserva e baixa.
+    Consulta e altera o estoque local SQLite (UC002); nao sincroniza com estoque externo.
     """
     @staticmethod
     def consultar_disponibilidade(conn, store_id, product_id, quantity):
@@ -394,9 +396,11 @@ def separate_order(order_id, payload):
     1. Operador coleta o item na prateleira fisica.
     2. Valida codigo de barras ou SKU digitado manualmente (Fluxo 5.2.5.2).
     3. Embala o pacote e atualiza o status para 'pronto_retirada'.
-    4. Gera automaticamente o QR Code unico de retirada e envia a notificacao ao cliente (UC006).
+    4. Gera voucher unico de retirada e registra notificacao local em SQLite (UC006); nao envia e-mail.
     """
     barcode_or_sku = str(payload.get("barcode_or_sku", "")).strip()
+    if not barcode_or_sku:
+        raise ApiError(400, "Informe o codigo de barras ou SKU do produto.")
 
     with connect_db() as conn:
         order = get_order(conn, order_id)
@@ -406,7 +410,7 @@ def separate_order(order_id, payload):
         if order["status"] not in ("aguardando_separacao", "aguardando_preparacao"):
             raise ApiError(400, f"O pedido nao esta aguardando separacao (status atual: {order['status']}).")
 
-        # Validacao de leitura de codigo de barras ou SKU (RF005 / Fluxo 5.2.4 passo 4 e Fluxo 5.2.5.2)
+        # Validacao do codigo de barras ou SKU informado (RF005 / Fluxo 5.2.5.2).
         esperado_sku = (order["product_sku"] or "").strip().upper()
         esperado_barcode = (order["product_barcode"] or "").strip()
         informado = barcode_or_sku.upper()
@@ -418,7 +422,7 @@ def separate_order(order_id, payload):
                 f"(SKU: {esperado_sku} / Codigo de Barras: {esperado_barcode})."
             )
 
-        # Gera voucher/QR Code unico de retirada autenticado (UC006 / RNF003)
+        # Gera voucher unico autenticado (UC006 / RNF003); a interface nao integra leitor de QR.
         pickup_code = generate_pickup_code(order_id)
         timestamp = now_iso()
 
@@ -448,7 +452,7 @@ def register_ruptura(order_id, payload):
     UC008 - Registrar Ruptura (Falta de Item) (Ponto de Extensao de UC005):
     Disparado quando o operador nao localiza o item fisico na prateleira (Fluxo 5.2.5.1 / RF006).
     - Cancela o pedido com status 'cancelado_ruptura'.
-    - Registra solicitacao de estorno financeiro imediato junto a operadora de cartao.
+    - Registra localmente a solicitacao de estorno; nenhuma operadora financeira e chamada.
     - Atualiza o estoque da filial para 0 para impedir novas vendas indevidas.
     """
     reason = str(payload.get("reason", "Ruptura de estoque identificada na prateleira fisica.")).strip()
@@ -481,8 +485,8 @@ def register_ruptura(order_id, payload):
         create_notification(
             conn,
             order_id,
-            f"UC008: Ruptura de estoque confirmada na filial. Pedido cancelado e estorno financeiro "
-            f"de R$ {order['product_price'] * order['quantity']:.2f} solicitado a operadora."
+            f"UC008: Ruptura confirmada. Pedido cancelado e solicitacao local de estorno de "
+            f"R$ {order['product_price'] * order['quantity']:.2f} registrada no prototipo; operadora nao integrada."
         )
 
         return row_to_dict(get_order(conn, order_id))
@@ -491,10 +495,10 @@ def register_ruptura(order_id, payload):
 def validate_pickup(payload):
     """
     UC007 - Validar Retirada (Ator: Operador da Loja / Atendente):
-    1. Escaneia QR Code ou executa busca manual por CPF e numero do pedido (Fluxo 5.3.5.2).
-    2. Confere a documentacao fisica com o titular ou Terceiro Autorizado (Fluxo 5.3.5.1).
+    1. Localiza pelo voucher informado manualmente, CPF ou numero do pedido.
+    2. Registra a confirmacao do operador sobre a conferencia do documento fisico.
     3. Confirma a validacao presencial no sistema e registra baixa com status 'entregue_cliente'.
-    4. Envia confirmacao de entrega e finaliza o ciclo do pedido.
+    4. Registra notificacao local de entrega e finaliza o ciclo do pedido.
     """
     order_id = payload.get("order_id")
     pickup_code = (payload.get("pickup_code") or "").strip()
@@ -603,7 +607,7 @@ def expire_abandoned_order(order_id):
         create_notification(
             conn,
             order_id,
-            "Pedido expirado por nao-comparecimento (7 dias). Item devolvido a prateleira e estorno acionado."
+            "Expiracao de sete dias simulada. Estoque local atualizado e solicitacao de estorno registrada no prototipo; operadora nao integrada."
         )
 
         return row_to_dict(get_order(conn, order_id))
