@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>MegaLoja Click & Collect • Trabalho G2 Unilasalle</title>
     <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <style>
@@ -102,13 +103,13 @@
         <div class="bg-gradient-to-r from-blue-700 via-indigo-700 to-blue-800 text-white rounded-2xl p-6 md:p-8 shadow-lg flex flex-col md:flex-row justify-between items-center gap-6 relative overflow-hidden border border-blue-800">
             <div class="space-y-2.5 z-10 text-center md:text-left">
                 <span class="bg-amber-400 text-slate-900 text-[10px] font-black px-2.5 py-1 rounded-full uppercase tracking-widest shadow-sm">
-                    <i class="fa-solid fa-bolt mr-1"></i> Click & Collect Integrado
+                    <i class="fa-solid fa-bolt mr-1"></i> Protótipo Click & Collect
                 </span>
                 <h2 class="text-2xl md:text-3xl font-extrabold tracking-tight max-w-xl leading-tight">
                     Compre Online e Retire na Filial com Frete Grátis
                 </h2>
                 <p class="text-xs text-blue-100 max-w-lg">
-                    Integração em tempo real com o Sistema de Estoque (S.E.). Validação segura por QR Code criptografado no balcão de atendimento.
+                    Demonstração local dos fluxos de retirada. O voucher é associado ao pedido e validado no balcão.
                 </p>
             </div>
             <div class="bg-white/10 border border-white/20 backdrop-blur-md rounded-xl p-4 text-center min-w-[210px] z-10 shadow-lg">
@@ -279,9 +280,9 @@
                 <div class="space-y-3 bg-blue-50/30 p-3.5 rounded-xl border border-blue-100">
                     <div class="flex justify-between items-center">
                         <h3 class="text-xs font-black text-gray-700 uppercase tracking-wider flex items-center gap-1.5">
-                            <i class="fa-solid fa-credit-card text-blue-600"></i> Pagamento com Cartão (RF003 / HTTPS)
+                            <i class="fa-solid fa-credit-card text-blue-600"></i> Pagamento simulado (RF003)
                         </h3>
-                        <span class="text-[9px] text-emerald-700 font-bold bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200">Ambiente Seguro SSL</span>
+                        <span class="text-[9px] text-amber-700 font-bold bg-amber-50 px-2 py-0.5 rounded border border-amber-200">Sem operadora externa</span>
                     </div>
                     <div class="grid grid-cols-1 sm:grid-cols-3 gap-2">
                         <div class="sm:col-span-2">
@@ -370,7 +371,7 @@
                         </span>
                         
                         <div class="w-36 h-36 bg-white border border-gray-200 p-2 relative flex items-center justify-center rounded-xl shadow-inner">
-                            <img id="img-qrcode" src="" alt="QR Code" class="w-full h-full object-contain">
+                            <div id="img-qrcode" class="w-full h-full flex items-center justify-center"></div>
                             <div id="overlay-qr" class="absolute inset-0 bg-slate-950/90 flex flex-col items-center justify-center p-3 text-center text-white rounded-xl">
                                 <i class="fa-solid fa-lock text-sm text-yellow-400 mb-1.5"></i>
                                 <p class="text-[10px] leading-tight text-slate-300 font-semibold">
@@ -471,12 +472,12 @@
                     <!-- Campo de Leitura / Bipagem de Código de Barras ou SKU (Fluxo 5.2.4 e 5.2.5.2) -->
                     <div class="space-y-2">
                         <label class="text-[10px] font-black text-gray-500 uppercase tracking-wider block">
-                            Leitura do Coletor de Dados / Digitação de SKU (RNF005 / Fluxo 5.2.5.2):
+                            SKU/código de barras (digitação; leitor não integrado):
                         </label>
                         <div class="flex gap-2">
-                            <input type="text" id="input-leitor-sku" placeholder="Aproxime o leitor óptico ou digite o SKU..." class="flex-1 px-3 py-2 border border-gray-300 rounded-xl text-xs font-mono focus:outline-none focus:border-blue-600">
-                            <button onclick="preencherSkuTeste()" class="bg-gray-200 hover:bg-gray-300 text-gray-700 px-3 py-2 rounded-xl text-xs font-bold" title="Preenche o SKU correto para agilizar testes">
-                                <i class="fa-solid fa-barcode"></i> Bipar
+                            <input type="text" id="input-leitor-sku" placeholder="Digite o SKU ou código de barras..." class="flex-1 px-3 py-2 border border-gray-300 rounded-xl text-xs font-mono focus:outline-none focus:border-blue-600">
+                            <button onclick="preencherSkuTeste()" class="bg-gray-200 hover:bg-gray-300 text-gray-700 px-3 py-2 rounded-xl text-xs font-bold" title="Preenche o SKU correto para simular a bipagem">
+                                <i class="fa-solid fa-barcode"></i> Simular bipagem
                             </button>
                         </div>
                     </div>
@@ -494,7 +495,7 @@
                             </span>
                         </div>
                         <p class="text-[11px] text-red-600 leading-tight">
-                            Se o item não estiver na prateleira física, acione a ruptura para cancelar o pedido e disparar estorno automático à operadora.
+                            Se o item não estiver na prateleira física, acione a ruptura para cancelar o pedido e registrar localmente a solicitação de estorno (sem integração com a operadora).
                         </p>
                         <button onclick="executarRupturaUC008()" class="w-full bg-red-600 hover:bg-red-700 text-white font-bold py-2 rounded-lg text-xs uppercase tracking-wider transition-colors flex items-center justify-center gap-1.5">
                             <i class="fa-solid fa-ban"></i> Registrar Indisponibilidade (UC008)
@@ -520,7 +521,7 @@
                     <div class="space-y-3">
                         <div>
                             <label class="text-[10px] font-black text-gray-500 uppercase block mb-1">
-                                Escanear Voucher / QR Code do Cliente:
+                                Informar voucher / código do QR (sem leitor integrado):
                             </label>
                             <div class="flex gap-2">
                                 <input type="text" id="input-busca-voucher" placeholder="Ex: HV-0001-XXXX-XXXX" class="flex-1 px-3 py-2 border border-gray-300 rounded-xl text-xs font-mono focus:outline-none focus:border-emerald-600">
@@ -1004,7 +1005,7 @@
                 pedidoAtivo = resp.order;
                 atualizarTelaSucessoComprovante(pedidoAtivo);
                 mudarAba('sucesso');
-                triggerToast("Pedido Confirmado!", "Ordem de separação enviada ao operador da filial (UC004).", "success");
+                triggerToast("Pedido Confirmado!", "Pedido registrado na fila local de separação da filial (UC004).", "success");
                 await recarregarPedidosBalcao();
 
                 // Atualiza estoque local na memória
@@ -1042,7 +1043,11 @@
             const wrap = document.getElementById('wrapper-qrcode');
             const overlay = document.getElementById('overlay-qr');
             const token = document.getElementById('txt-token-numerico');
-            const imgQr = document.getElementById('img-qrcode');
+            const qrCode = window.pickupQrCode || (window.pickupQrCode = new QRCode(document.getElementById('img-qrcode'), {
+                width: 128,
+                height: 128,
+                correctLevel: QRCode.CorrectLevel.H
+            }));
 
             if (status === 'aguardando_separacao' || status === 'aguardando_preparacao') {
                 badge.className = "bg-amber-50 text-amber-800 text-xs font-bold px-3 py-1.5 rounded-full border border-amber-200 flex items-center gap-2";
@@ -1051,7 +1056,7 @@
                 wrap.classList.add('opacity-60');
                 overlay.classList.remove('hidden');
                 token.innerText = "••••-••••";
-                imgQr.src = "https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=PENDENTE";
+                qrCode.makeCode("PENDENTE");
             }
             else if (status === 'pronto_retirada') {
                 badge.className = "bg-emerald-50 text-emerald-800 text-xs font-bold px-3 py-1.5 rounded-full border border-emerald-200 flex items-center gap-2";
@@ -1060,7 +1065,7 @@
                 wrap.classList.remove('opacity-60');
                 overlay.classList.add('hidden');
                 token.innerText = pickupCode || "HV-0000-0000";
-                imgQr.src = `https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=${encodeURIComponent(pickupCode || 'VOUCHER')}`;
+                qrCode.makeCode(pickupCode || 'VOUCHER');
             }
             else if (status === 'entregue_cliente' || status === 'retirado') {
                 badge.className = "bg-emerald-100 text-emerald-900 text-xs font-bold px-3 py-1.5 rounded-full border border-emerald-300 flex items-center gap-2";
@@ -1073,7 +1078,7 @@
             else if (status === 'cancelado_ruptura') {
                 badge.className = "bg-rose-50 text-rose-800 text-xs font-bold px-3 py-1.5 rounded-full border border-rose-200 flex items-center gap-2";
                 txtStatus.innerText = "Cancelado por Ruptura de Estoque (UC008)";
-                txtInstrucao.innerText = "O item não estava disponível na prateleira física. Solicitação de estorno enviada à operadora de cartão.";
+                txtInstrucao.innerText = "O item não estava disponível. Pedido cancelado e solicitação de estorno registrada no protótipo; a integração com a operadora não está implementada.";
                 wrap.classList.add('opacity-40');
                 overlay.classList.remove('hidden');
                 token.innerText = "ESTORNO SOLICITADO";
@@ -1144,7 +1149,7 @@
         function preencherSkuTeste() {
             if (!pedidoSeparacaoSelecionado) return;
             document.getElementById('input-leitor-sku').value = pedidoSeparacaoSelecionado.product_sku || pedidoSeparacaoSelecionado.product_barcode;
-            triggerToast("Leitura Simulada", "Código de barras óptico lido com sucesso.", "success");
+            triggerToast("Bipagem Simulada", "SKU/código de barras preenchido para teste.", "success");
         }
 
         // Executar UC005: Concluir Separação
@@ -1197,7 +1202,7 @@
                     body: JSON.stringify({ reason: motivo })
                 });
 
-                triggerToast("Ruptura Registrada (UC008)", "Pedido cancelado e solicitação de estorno emitida à operadora.", "warning");
+                triggerToast("Ruptura Registrada (UC008)", "Pedido cancelado e solicitação de estorno registrada no protótipo.", "warning");
                 if (pedidoAtivo && pedidoAtivo.id === resp.order.id) {
                     pedidoAtivo = resp.order;
                     configurarLayoutStatusCliente(pedidoAtivo.status, null, null);
@@ -1324,7 +1329,7 @@
                     method: 'POST'
                 });
 
-                triggerToast("Regra de Abandono", "Pedido expirado. Item retornado à prateleira e estorno efetuado.", "warning");
+                triggerToast("Regra de Abandono", "Expiração simulada. Estoque local atualizado e solicitação de estorno registrada no protótipo.", "warning");
                 if (pedidoAtivo && pedidoAtivo.id === resp.order.id) {
                     pedidoAtivo = resp.order;
                     configurarLayoutStatusCliente(pedidoAtivo.status, null, null);
