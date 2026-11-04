@@ -380,9 +380,12 @@
                             </div>
                         </div>
 
-                        <div id="txt-token-numerico" class="text-xs font-mono bg-white px-3 py-1 rounded-lg border border-gray-300 text-gray-500 font-bold tracking-widest shadow-sm">
+                        <div id="txt-token-numerico" class="w-full max-w-full text-[11px] leading-snug font-mono bg-white px-3 py-2 rounded-lg border border-gray-300 text-gray-500 font-bold text-center break-all select-all shadow-sm">
                             XXXX-XXXX
                         </div>
+                        <button id="btn-copiar-voucher" type="button" onclick="copiarVoucher()" class="hidden text-xs text-blue-700 hover:text-blue-900 font-bold flex items-center gap-1" aria-label="Copiar código do voucher">
+                            <i class="fa-regular fa-copy"></i> <span id="txt-copiar-voucher">Copiar código</span>
+                        </button>
                     </div>
 
                     <div class="flex justify-between items-center pt-2">
@@ -1036,7 +1039,22 @@
             configurarLayoutStatusCliente(pedido.status, pedido.pickup_code);
         }
 
+        async function copiarVoucher() {
+            const codigo = document.getElementById('txt-token-numerico').innerText.trim();
+            const rotulo = document.getElementById('txt-copiar-voucher');
+            try {
+                await navigator.clipboard.writeText(codigo);
+                rotulo.innerText = "Código copiado";
+            } catch (erro) {
+                // Sem permissão de área de transferência: o texto continua selecionável com um clique.
+                rotulo.innerText = "Selecione e copie o código acima";
+            }
+            setTimeout(() => { rotulo.innerText = "Copiar código"; }, 2500);
+        }
+
         function configurarLayoutStatusCliente(status, pickupCode) {
+            const botaoCopiar = document.getElementById('btn-copiar-voucher');
+            botaoCopiar.classList.toggle('hidden', status !== 'pronto_retirada');
             const badge = document.getElementById('badge-status-cliente');
             const txtStatus = document.getElementById('txt-status-cliente');
             const txtInstrucao = document.getElementById('txt-instrucao-cliente');
