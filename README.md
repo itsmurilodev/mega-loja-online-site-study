@@ -2,7 +2,7 @@
 
 Projeto desenvolvido para a disciplina de **Laboratório de Engenharia de Software** da **Universidade LaSalle (Unilasalle)** — **Trabalho G2**.
 
-O objetivo do sistema é unificar o ambiente de compras digitais ao estoque das lojas físicas, permitindo que o cliente compre pelo site e retire o produto diretamente em uma filial de sua preferência com frete grátis, validação segura por QR Code e integração em tempo real com estoque e operadora financeira.
+O objetivo do produto é unificar compras digitais e retirada em loja. O código desta Sprint 1 é um protótipo local que demonstra parte desse fluxo; integração real com estoque e operadora financeira ainda não está implementada (consulte os limites ao final).
 
 ---
 
@@ -20,17 +20,19 @@ O objetivo do sistema é unificar o ambiente de compras digitais ao estoque das 
 
 - **Ator 1: Cliente** — Usuário final que realiza a compra, seleciona a filial para retirada, recebe o QR Code e busca o produto na loja física.
 - **Ator 2: Operador da Loja** — Funcionário responsável por receber o pedido no painel local, separar e embalar o produto no estoque físico e validar a entrega ao cliente.
-- **Ator 3: Sistema de Estoque (S.E.)** — Ator externo/suporte que monitora e fornece a disponibilidade de itens por loja em tempo real e registra a reserva/baixa física.
-- **Ator 4: Operadora de Cartão** — Serviço externo responsável por receber os dados do cartão do cliente, processar a transação financeira em tempo real e retornar o status da cobrança (aprovado ou recusado).
+- **Ator 3: Sistema de Estoque (S.E.)** — Ator externo previsto nos requisitos; no protótipo, consulta e reserva são feitas em SQLite local.
+- **Ator 4: Operadora de Cartão** — Serviço externo previsto nos requisitos; no protótipo, aprovação e recusa são simuladas localmente.
 
 ---
 
 ## 3. Casos de Uso Detalhados (Sprint G2)
 
+Os casos abaixo descrevem o comportamento pretendido pelo sistema. As limitações do que está implementado no protótipo da Sprint 1 estão registradas na seção 7.
+
 ### UC003 - Finalizar Compra
 - **Ator Principal:** Cliente
 - **Relação de Inclusão (`<<include>>`):** `UC002 - Consultar Disponibilidade` obrigatória no S.E.
-- **Regras:** Aplica frete R$ 0,00, processa pagamento na Operadora de Cartão (RF003), reserva item no estoque e gera pedido com status inicial `Aguardando Separação`.
+- **Regras pretendidas:** Aplica frete R$ 0,00, processa pagamento na Operadora de Cartão (RF003), reserva item no estoque e gera pedido com status inicial `Aguardando Separação`.
 - **Fluxos Alternativos:**
   - `5.1.5.1 Item indisponível na loja selecionada`: Alerta o cliente e sugere outra filial ou entrega domiciliar.
   - `5.1.5.2 Pagamento recusado`: Informa falha na transação e solicita nova forma de pagamento.
@@ -38,17 +40,17 @@ O objetivo do sistema é unificar o ambiente de compras digitais ao estoque das 
 
 ### UC005 - Separar Pedido
 - **Ator Principal:** Operador da Loja (Perfil Retaguarda)
-- **Regras:** Painel local com ordenação de pedidos pendentes, conferência de código de barras ou digitação manual de SKU (Fluxo 5.2.5.2) e embalagem.
-- **Conclusão:** Status atualizado para `Pronto para Retirada`, geração automática do QR Code criptografado (UC006 / RNF003) e notificação ao cliente.
+- **Regras pretendidas:** Painel local com ordenação de pedidos pendentes, conferência de código de barras ou digitação manual de SKU (Fluxo 5.2.5.2) e embalagem.
+- **Conclusão:** Status atualizado para `Pronto para Retirada`, geração de voucher aleatório assinado com HMAC e registro de notificação no sistema (UC006 / RNF003).
 - **Ponto de Extensão (`<<extend>>`):** `UC008 - Registrar Ruptura (Falta de Item)`.
 
 ### UC008 - Registrar Ruptura (Falta de Item)
 - **Ator Principal:** Operador da Loja
-- **Regra:** Disparado quando o item físico não se encontra na prateleira (Fluxo 5.2.5.1). O pedido é cancelado (`cancelado_ruptura`), a solicitação de estorno é emitida à operadora de cartão e o estoque da filial é corrigido para zero.
+- **Regra pretendida:** Disparado quando o item físico não se encontra na prateleira (Fluxo 5.2.5.1). O pedido é cancelado (`cancelado_ruptura`), uma solicitação de estorno é registrada e o estoque da filial é corrigido para zero.
 
 ### UC007 - Validar Retirada
 - **Ator Principal:** Operador da Loja / Atendente de Balcão
-- **Regras:** Escaneamento do QR Code com conferência de documento físico com foto (titular ou terceiro previamente cadastrado).
+- **Regras pretendidas:** Escaneamento do QR Code com conferência de documento físico com foto (titular ou terceiro previamente cadastrado).
 - **Fluxo Alternativo 5.3.5.2 (QR Code ilegível/expirado):** Busca manual de contingência por CPF e número do pedido.
 - **Conclusão:** Status final `Entregue ao Cliente` e encerramento do ciclo de vida da transação.
 
@@ -68,7 +70,7 @@ O objetivo do sistema é unificar o ambiente de compras digitais ao estoque das 
 ### Requisitos Não Funcionais (RNFs)
 - **RNF001:** Tempo de Resposta e Sincronização $\le$ 60 segundos.
 - **RNF002:** Segurança e Criptografia (HTTPS/SSL e dados sensíveis protegidos).
-- **RNF003:** Autenticidade do Voucher (QR Code assinado/criptografado contra fraudes).
+- **RNF003:** Autenticidade do Voucher (código aleatório, assinado com HMAC e vinculado ao pedido).
 - **RNF004:** Operação Tolerante a Falhas / Modo Offline (contingência e cache local).
 - **RNF005:** Acessibilidade do Painel (responsivo para coletores portáteis e terminais web).
 
@@ -106,7 +108,15 @@ Abra o arquivo `front.html` diretamente no navegador ou via servidor local (ex: 
    - Conclua a compra: o comprovante será exibido e o status ficará como `Aguardando Separação` com QR Code bloqueado.
 2. **Visão Balcão / Operador:**
    - No topo, alterne para *Balcão / Operador*.
-   - Em *UC005 Separação de Pedidos*, selecione o pedido, clique em *Bipar* para ler o SKU/código de barras e clique em *Concluir Embalagem*.
-   - Volte à visão do cliente: o QR Code estará liberado com voucher único assinado!
-   - Para demonstrar o ponto de extensão *UC008*, clique em *Registrar Indisponibilidade* na esteira de separação.
-   - Em *UC007 Validação Presencial*, escaneie o voucher ou faça busca manual por CPF, confira o documento do recebedor e confirme a entrega: o sistema registra a baixa `Entregue ao Cliente` finalizando o ciclo com sucesso!
+   - Em *UC005 Separação de Pedidos*, selecione o pedido, informe manualmente o SKU/código de barras ou use o botão de simulação, e clique em *Concluir Embalagem*.
+   - Volte à visão do cliente: o voucher único estará liberado; o QR Code é uma representação do código no protótipo.
+   - Para demonstrar o ponto de extensão *UC008*, clique em *Registrar Indisponibilidade* na esteira de separação; o protótipo registra o pedido de estorno localmente, sem chamar uma operadora.
+   - Em *UC007 Validação Presencial*, informe o voucher ou faça busca manual por CPF, confira o documento do recebedor e confirme a entrega: o sistema registra a baixa `Entregue ao Cliente`.
+
+## 7. Limites do protótipo da Sprint 1
+
+- O pagamento e o sistema de estoque são simulados; os pedidos e o estoque ficam em um banco SQLite local.
+- As notificações são registradas no banco local. Não há envio de e-mail ou geração de cupom.
+- O servidor local usa HTTP e o painel do operador não possui autenticação. HTTPS de produção e autenticação são requisitos ainda não atendidos.
+- A interface não implementa operação offline nem sincronização com um sistema externo de estoque.
+- Configure `PICKUP_TOKEN_SECRET` com um segredo aleatório e persistente antes de executar em qualquer ambiente compartilhado. Sem essa variável, o protótipo gera uma chave temporária a cada inicialização; os vouchers existentes continuam sendo consultados pelo valor armazenado no banco.

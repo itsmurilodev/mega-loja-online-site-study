@@ -12,26 +12,27 @@ Backend desenvolvido para a disciplina de **Laboratório de Engenharia de Softwa
 
 ---
 
-## 2. Casos de Uso Contemplados
+## 2. Casos de Uso e Limites do Protótipo
+
+Os casos abaixo representam fluxos demonstrados parcialmente no protótipo local. Não há integração com serviços externos de estoque, pagamento, e-mail ou leitura óptica.
 
 - **UC003 - Finalizar Compra**:
-  - Consulta obrigatória de estoque em tempo real na filial (UC002).
+  - Consulta e reserva de estoque na base SQLite local (UC002); não há sincronização em tempo real com sistema externo.
   - Aplicação automática de frete R$ 0,00.
-  - Processamento financeiro com a Operadora de Cartão (RF003).
+  - Simulação local de aprovação ou recusa financeira; nenhuma operadora é chamada.
   - Suporte a autorização de terceiro para retirada (Fluxo 5.3.5.1).
   - Simulação de recusa de transação (Fluxo 5.1.5.2).
   - Status inicial: `aguardando_separacao`.
 - **UC005 - Separar Pedido**:
-  - Painel de separação por filial com ordenação de pedidos.
-  - Leitura ótica de código de barras ou digitação manual de SKU (Fluxo 5.2.5.2).
-  - Status atualizado para `pronto_retirada` e geração do voucher/QR Code seguro (UC006 / RNF003).
+  - Painel de separação por filial e conferência manual do SKU/código de barras; o botão “Bipar” apenas preenche um valor de teste.
+  - Status atualizado para `pronto_retirada`, voucher único assinado com HMAC e notificação registrada no SQLite (UC006 / RNF003); não há envio de e-mail.
 - **UC008 - Registrar Ruptura de Estoque** (*Ponto de Extensão de UC005*):
   - Acionado em caso de falta de item físico na prateleira (Fluxo 5.2.5.1).
   - Status atualizado para `cancelado_ruptura`.
-  - Disparo de solicitação de estorno à operadora financeira e ajuste de estoque.
+  - Registro local de `refund_requested` e ajuste do estoque local; nenhum estorno real é enviado à operadora.
 - **UC007 - Validar Retirada**:
-  - Validação no balcão por leitura de QR Code ou busca manual por CPF/Pedido (Fluxo 5.3.5.2).
-  - Conferência de documento físico (titular ou terceiro autorizado cadastrado).
+  - Validação no balcão por código de voucher informado manualmente ou busca por CPF/pedido (Fluxo 5.3.5.2); não há leitor de QR/câmera.
+  - Registro da confirmação do operador sobre a conferência do documento (a conferência física não pode ser comprovada pelo sistema).
   - Status final: `entregue_cliente`.
 
 ---
@@ -70,7 +71,9 @@ http://127.0.0.1:5000
 | `GET` | `/api/products` | RF002 | Lista produtos do catálogo com SKU e código de barras |
 | `GET` | `/api/orders` | RF005 | Lista pedidos (filtros por loja e status) |
 | `POST` | `/api/orders` | **UC003** | Finalizar compra, reservar estoque e processar cartão |
-| `POST` | `/api/orders/{id}/separate` | **UC005** | Registrar separação com leitura de SKU e liberar QR Code |
-| `POST` | `/api/orders/{id}/rupture` | **UC008** | Registrar ruptura de estoque e solicitar estorno |
+| `POST` | `/api/orders/{id}/separate` | **UC005** | Conferir SKU/código de barras informado manualmente e liberar voucher |
+| `POST` | `/api/orders/{id}/rupture` | **UC008** | Registrar ruptura e solicitação local de estorno |
 | `POST` | `/api/orders/validate-pickup` | **UC007** | Validar retirada presencial e registrar entrega |
 | `POST` | `/api/orders/{id}/expire` | Abandono | Cancelar por não-comparecimento (7 dias) e devolver estoque |
+
+O endpoint de abandono simula o decurso de sete dias e registra a solicitação de estorno no protótipo; não efetua estorno financeiro.
