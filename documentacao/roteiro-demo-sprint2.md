@@ -18,20 +18,27 @@ Itens marcados com **(se pronto)** dependem de cartões que ainda estão em anda
 
 ## 2. Antes de começar (feito no dia 11/11, no ensaio, e refeito 12/11 de manhã)
 
+**Terminal 1: banco limpo e API**
 ```bash
-# 1. banco limpo (os dados de teste anteriores alteram o estoque)
+# banco limpo (os testes anteriores alteram o estoque)
 rm -f backend/megaloja.db
-# 2. segredo do voucher fixo, para os códigos não mudarem no meio da demo
+# segredo do voucher: sem ele o servidor usa um aleatório a cada início
+# (vouchers já emitidos continuam válidos, pois são consultados pelo valor salvo)
 export PICKUP_TOKEN_SECRET="troque-por-um-segredo-qualquer"
-# 3. API e front
-python3 backend/app.py
-python3 -m http.server 3000
+python3 backend/app.py        # fica rodando: não feche este terminal
 ```
+
+**Terminal 2: front**
+```bash
+python3 -m http.server 3000   # fica rodando em outro terminal
+```
+
+Cada comando fica em primeiro plano, por isso são **dois terminais separados**. Se rodados no mesmo terminal, o segundo nunca inicia.
 
 - Estar na `main` com o **PR #1 já mergeado**: o botão "Copiar código" do voucher e o QR gerado localmente vêm dele.
 - Abrir **http://127.0.0.1:3000/front.html**. **Nunca `localhost`**: no macOS a porta 5000 é do AirPlay e a API responde 403.
-- Duas abas abertas: uma como cliente e outra no painel Balcão/Operador.
-- Trello aberto no quadro, em outra aba.
+- **Use UMA aba só para a demo do sistema** e alterne entre as visões **Cliente** e **Balcão / Operador** pelo botão no topo da própria página. O pedido ativo do cliente fica só na memória da aba: em duas abas o voucher não aparece na do cliente, e **recarregar a página perde o pedido**. Guilherme e Leonardo apresentam no mesmo computador e na mesma aba, sem recarregar entre os blocos.
+- Trello aberto no quadro, em outra aba (não é parte do sistema).
 - Diagramas (PNG) e o PDF da Sprint 2 abertos antes de começar.
 - **Plano B geral:** gravar um vídeo curto da demo completa no ensaio. Se a API falhar ao vivo, rodar o vídeo e comentar por cima.
 
@@ -72,7 +79,7 @@ python3 -m http.server 3000
 ### Bloco 5: Leonardo, demo do operador (3 min)
 1. **Login do operador (S2-06) (se pronto):** mostrar que sem login a separação é recusada (401) e que com login funciona. Plano B: mostrar o teste automático que prova o 401 e dizer que a tela de login completa vem na Sprint 3 com o Supabase.
 2. No painel, abrir o pedido do Smartphone. Digitar um SKU errado: mostrar o erro. Depois **Simular bipagem** e **Concluir Embalagem**.
-3. Voltar à aba do cliente: mostrar o voucher liberado e usar o botão **Copiar código**.
+3. Voltar à visão **Cliente** pelo botão no topo, **na mesma aba e sem recarregar**: mostrar o voucher liberado e usar o botão **Copiar código**.
 4. Balcão, validação presencial: colar o voucher, **Buscar**, marcar que o documento foi conferido e **Validar Retirada**. Status final: Entregue ao Cliente.
 5. **Ruptura (UC008):** comprar o Sofá, no painel clicar **Registrar Indisponibilidade**. Mostrar o pedido cancelado e o estoque da filial zerado.
 6. **Terceiro:** comprar de novo com terceiro autorizado e validar a retirada mostrando os dados do terceiro.
