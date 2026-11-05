@@ -33,17 +33,26 @@ loadEnvFile();
 export const HOST = process.env.HOST || "127.0.0.1";
 export const PORT = Number(process.env.PORT || 5000);
 
-export const SUPABASE_URL =
-  process.env.SUPABASE_URL || "https://oubrzbmjsqlpgnrjngku.supabase.co";
+// Sprint 3 (RNF002 / RNF003): Segredos estritamente fora do código-fonte (via variáveis de ambiente)
+export const SUPABASE_URL = process.env.SUPABASE_URL || "";
 export const SUPABASE_KEY =
   process.env.SUPABASE_SERVICE_ROLE_KEY ||
   process.env.SUPABASE_ANON_KEY ||
   process.env.SUPABASE_KEY ||
-  "sb_publishable_Lsh8OOq6v-cnpsHi7MABjA_dKADD-kz";
+  "";
 
-// Chave interna para geração de voucher autenticado (RNF003: Autenticidade do Voucher)
-export const SECRET_TOKEN_KEY =
-  process.env.SECRET_TOKEN_KEY || "unilasalle-click-collect-2026-secret";
+export const SECRET_TOKEN_KEY = process.env.SECRET_TOKEN_KEY || "";
+
+// Sprint 3 (RNF002): Configuração de HTTPS em ambiente de demo/produção
+export const FORCE_HTTPS =
+  process.env.FORCE_HTTPS === "true" || Boolean(process.env.VERCEL);
+export const HTTPS_KEY_PATH = process.env.HTTPS_KEY_PATH || "";
+export const HTTPS_CERT_PATH = process.env.HTTPS_CERT_PATH || "";
+
+// Sprint 3 (RNF001): Limite máximo de tempo de resposta para consulta e reserva de estoque (60s = 60.000ms)
+export const RNF001_SLA_LIMIT_MS = Number(
+  process.env.RNF001_SLA_LIMIT_MS || 60000
+);
 
 // Estados oficiais do ciclo de vida de um pedido Click & Collect (Trabalho G2).
 export const ORDER_STATUS = new Set<string>([
@@ -121,4 +130,16 @@ export interface NotificationRow {
   order_id: number;
   message: string;
   created_at: string;
+}
+
+export type Rnf001OperationType = "consulta_estoque" | "reserva_estoque";
+
+export interface Rnf001Measurement {
+  operation: Rnf001OperationType;
+  action: string;
+  duration_ms: number;
+  sla_limit_ms: number;
+  compliant: boolean;
+  timestamp: string;
+  metadata?: Record<string, unknown>;
 }

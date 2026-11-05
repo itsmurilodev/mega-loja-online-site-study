@@ -1,19 +1,25 @@
 import { Injectable, InternalServerErrorException } from "@nestjs/common";
+import { performance } from "node:perf_hooks";
 import { StoreRow } from "../common/constants";
+import { RnfMetricsService } from "../common/metrics/rnf-metrics.service";
 import { SupabaseService } from "../supabase/supabase.service";
 
 /**
  * Serviço de Lojas e Sistema de Estoque (Ator 3 - S.E. no padrão BCE)
- * Monitora a disponibilidade por loja física em tempo real (UC002) e efetua reserva, devolução e ruptura.
+ * Monitora a disponibilidade por loja física em tempo real (UC002) com medição de SLA do RNF001 (<= 60s).
  */
 @Injectable()
 export class StoresService {
-  constructor(private readonly supabaseService: SupabaseService) {}
+  constructor(
+    private readonly supabaseService: SupabaseService,
+    private readonly rnfMetricsService: RnfMetricsService
+  ) {}
 
   async listStores(
     city?: string | null,
     productId?: string | number | null
   ): Promise<StoreRow[]> {
+    const start = performance.now();
     const supabase = this.supabaseService.client;
 
     let query = supabase
@@ -63,10 +69,19 @@ export class StoresService {
         stockByStore.set(Number(row.store_id), Number(row.quantity));
       }
 
-      return storeList.map((store) => ({
+      const result = storeList.map((store) => ({
         ...store,
         stock: stockByStore.get(store.id) ?? 0,
       }));
+
+      this.rnfMetricsService.record(
+        "consulta_estoque",
+        "listStoresWithStock",
+        performance.now() - start,
+        { product_id: parsedProductId, city: city ?? null }
+      );
+
+      return result;
     }
 
     return storeList;
@@ -92,13 +107,14 @@ export class StoresService {
   }
 
   /**
-   * UC002 - Consultar Disponibilidade de Estoque em Tempo Real
+   * UC002 - Consultar Disponibilidade de Estoque em Tempo Real (medido pelo RNF001 <= 60s)
    */
   async consultarDisponibilidade(
     storeId: number,
     productId: number,
     quantity: number
-  ): Promise<{ disponivel: boolean; available: number }> {
+  ): Promise<{ disponivel: boolean; available: number; duration_ms: number }> {
+    const start = performance.now();
     const supabase = this.supabaseService.client;
     const { data, error } = await supabase
       .from("inventory")
@@ -114,14 +130,30 @@ export class StoresService {
     }
 
     const available = data ? Number(data.quantity) : 0;
-    return { disponivel: available >= quantity, available };
+    const disponivel = available >= quantity;
+    const measurement = this.rnfMetricsService.record(
+      "consulta_estoque",
+      "UC002_consultarDisponibilidade",
+      performance.now() - start,
+      { store_id: storeId, product_id: productId, quantity, available, disponivel }
+    );
+
+    return {
+      disponivel,
+      available,
+      duration_ms: measurement.duration_ms,
+    };
   }
 
+  /**
+   * Reserva de estoque na filial (medido pelo RNF001 <= 60s)
+   */
   async reservarEstoque(
     storeId: number,
     productId: number,
     quantity: number
-  ): Promise<void> {
+  ): Promise<{ duration_ms: number }> {
+    const start = performance.now();
     const { available } = await this.consultarDisponibilidade(
       storeId,
       productId,
@@ -139,6 +171,15 @@ export class StoresService {
         `Erro no banco de dados (Supabase): ${error.message}`
       );
     }
+
+    const measurement = this.rnfMetricsService.record(
+      "reserva_estoque",
+      "UC003_reservarEstoque",
+      performance.now() - start,
+      { store_id: storeId, product_id: productId, quantity }
+    );
+
+    return { duration_ms: measurement.duration_ms };
   }
 
   async devolverEstoque(

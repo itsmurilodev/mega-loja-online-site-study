@@ -21,7 +21,7 @@ O objetivo do sistema é unificar o ambiente de compras digitais ao estoque das 
 - **Frontend (Boundary):** HTML5, TailwindCSS e JavaScript (`front.html`), consumindo a API REST de forma reativa.
 - **Backend (Control):** **TypeScript** + **NestJS** (`@nestjs/core`, `@nestjs/common`, `@nestjs/platform-express`), estruturado de forma modular em `backend/src/`.
 - **Banco de Dados em Nuvem (Entity):** **Supabase (PostgreSQL)** via `@supabase/supabase-js`, com *Row Level Security (RLS)* ativo e integridade referencial entre `stores`, `products`, `inventory`, `orders` e `notifications`.
-- **Deploy Serverless:** Configurado para **Vercel** (`vercel.json` + `api/index.ts`).
+- **Deploy Serverless & HTTPS:** Configurado para **Vercel** (`vercel.json` + `api/index.ts`) com cabeçalhos de segurança HSTS (`Strict-Transport-Security`).
 
 ---
 
@@ -63,7 +63,7 @@ O objetivo do sistema é unificar o ambiente de compras digitais ao estoque das 
 
 ---
 
-## 5. Requisitos do Sistema
+## 5. Requisitos do Sistema & Entregas da Sprint 3
 
 ### Requisitos Funcionais (RFs)
 - **RF001:** Seleção de Filial para Retirada durante o checkout (`GET /api/stores`).
@@ -74,23 +74,26 @@ O objetivo do sistema é unificar o ambiente de compras digitais ao estoque das 
 - **RF006:** Registro de Ruptura de Estoque com cancelamento e estorno (`POST /api/orders/:id/rupture`).
 - **RF007:** Validação Presencial da Retirada (`POST /api/orders/validate-pickup`).
 
-### Requisitos Não Funcionais (RNFs)
-- **RNF001:** Tempo de Resposta e Sincronização $\le$ 60 segundos com banco PostgreSQL em nuvem (Supabase).
-- **RNF002:** Segurança e Criptografia (HTTPS/SSL, RLS ativo no Supabase e mascaramento de cartão `•••• •••• •••• 1234`).
-- **RNF003:** Autenticidade do Voucher (QR Code assinado via HMAC-SHA256 contra fraudes).
-- **RNF004:** Operação Tolerante a Falhas (tratamento padronizado via `AllExceptionsFilter`).
-- **RNF005:** Acessibilidade do Painel (responsivo para coletores portáteis e terminais web).
+### Requisitos Não Funcionais (RNFs) e Escopo da Sprint 3
+- **Sprint 3:** HTTPS em ambiente de demo, segredos fora do código e medição de que consulta/reserva de estoque responde em até 60 s (**RNF001**). *Critério de aceite a detalhar no Planning da Sprint 3.*
+  - **RNF001 (Medição de SLA $\le$ 60s):** Monitoramento em tempo real via `RnfMetricsService` e `RnfMetricsInterceptor` (`performance.now()`), expondo cabeçalhos HTTP (`X-Response-Time-Ms`, `X-RNF001-SLA-Limit-Ms: 60000`, `X-RNF001-Compliant`), objeto `rnf001_telemetry` nas respostas de consulta/reserva e endpoint dedicado `GET /api/metrics/rnf001`.
+  - **RNF002 (HTTPS em Demo e Segredos Fora do Código):**
+    - Todas as chaves sensíveis (`SUPABASE_URL`, `SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY`, `SECRET_TOKEN_KEY`) externalizadas exclusivamente em variáveis de ambiente (`.env` / Vercel Env Vars), sem chaves hardcoded no código-fonte.
+    - Cabeçalho `Strict-Transport-Security` (HSTS) configurado em `vercel.json` e no `RnfMetricsInterceptor`, com bloqueio automático de requisições não-HTTPS quando `FORCE_HTTPS=true` e suporte a certificados TLS locais (`HTTPS_KEY_PATH` / `HTTPS_CERT_PATH`).
+  - **RNF003:** Autenticidade do Voucher (QR Code assinado via HMAC-SHA256 contra fraudes).
+  - **RNF004:** Operação Tolerante a Falhas (tratamento padronizado via `AllExceptionsFilter`).
+  - **RNF005:** Acessibilidade do Painel (responsivo para coletores portáteis e terminais web).
 
 ---
 
 ## 6. Arquitetura BCE (Boundary, Control, Entity) no NestJS
 
 Conforme modelado no Diagrama de Sequência do Trabalho G2:
-- **Boundary (Fronteira):** `InterfaceCheckout` e `PainelBalcao` (`front.html`) + Controllers HTTP do NestJS (`StoresController`, `ProductsController`, `OrdersController`).
+- **Boundary (Fronteira):** `InterfaceCheckout` e `PainelBalcao` (`front.html`) + Controllers HTTP do NestJS (`StoresController`, `ProductsController`, `OrdersController`) + `RnfMetricsInterceptor`.
 - **Control (Controle):** `OrdersService` (`backend/src/orders/orders.service.ts`), orquestrando os fluxos de negócio.
 - **Entity / Sistemas Externos:**
   - `SupabaseService` (`backend/src/supabase/supabase.service.ts`) — Persistência PostgreSQL em nuvem.
-  - `StoresService` (`backend/src/stores/stores.service.ts`) — Sistema de Estoque (S.E.).
+  - `StoresService` (`backend/src/stores/stores.service.ts`) — Sistema de Estoque (S.E.) com telemetria de consulta e reserva.
   - `OperadoraCartaoService` (`backend/src/payments/operadora-cartao.service.ts`) — Gateway financeiro.
 
 ---
@@ -99,12 +102,13 @@ Conforme modelado no Diagrama de Sequência do Trabalho G2:
 
 ### Pré-requisitos
 - **Node.js 18+** e **npm** instalados.
-- Projeto **Supabase** configurado (as tabelas e produtos já estão criados no projeto `megaloja-online` e o script DDL encontra-se em `backend/supabase_schema.sql`).
+- Projeto **Supabase** configurado (`backend/supabase_schema.sql`).
 
 ### Passo 1: Configurar Variáveis de Ambiente e Dependências
 
 ```bash
 cp .env.example .env
+# Preencha SUPABASE_URL, SUPABASE_ANON_KEY e SECRET_TOKEN_KEY no arquivo .env
 npm install
 ```
 
@@ -114,13 +118,12 @@ npm install
 npm run start:dev
 ```
 
-O servidor NestJS iniciará em `http://127.0.0.1:5000`.
+O servidor NestJS iniciará em `http://127.0.0.1:5000` (ou `https://` caso `HTTPS_KEY_PATH` e `HTTPS_CERT_PATH` estejam definidos).
 
 ### Passo 3: Acessar a Aplicação
 
 Abra diretamente no navegador:
-- `http://127.0.0.1:5000` (o NestJS serve o `front.html` automaticamente na raiz `/`), ou
-- Abra o arquivo `front.html` via Live Server / navegador.
+- `http://127.0.0.1:5000` (ou a URL HTTPS do ambiente de demo na Vercel).
 
 ---
 
@@ -128,31 +131,25 @@ Abra diretamente no navegador:
 
 Este roteiro guia a demonstração completa da arquitetura **NestJS + TypeScript + Supabase**:
 
-1. **Catálogo e Estoque Dinâmicos via Supabase (RF001 / RF002 / UC002):**
+1. **Segurança (HTTPS, Segredos Fora do Código) e Telemetria RNF001 (Sprint 3):**
+   - Acesse `/api/health` e `/api/metrics/rnf001` no ambiente de demo (HTTPS).
+   - Mostre o status `secrets_externalized: true` (nenhum segredo no código) e os cabeçalhos `Strict-Transport-Security` e `X-Response-Time-Ms`.
+
+2. **Catálogo e Estoque Dinâmicos via Supabase (RF001 / RF002 / UC002):**
    - Abra a aplicação na visão **Cliente** e o painel **Table Editor** do Supabase (`public.products` e `public.inventory`).
-   - Mostre que os produtos, preços, SKUs, códigos de barras e URLs de imagem (`image_url`) vêm em tempo real do banco PostgreSQL no Supabase via `GET /api/products` (sem dados hardcoded no código).
-   - Alterne a filial no topo (*Canoas Centro*, *Canoas Shopping*, *São Leopoldo Bourbon*) para demonstrar a atualização de estoque por filial em tempo real (`GET /api/stores?product_id=...`).
+   - Mostre que os produtos, preços, SKUs, códigos de barras e URLs de imagem (`image_url`) vêm em tempo real do banco PostgreSQL no Supabase via `GET /api/products`.
+   - Alterne a filial no topo (*Canoas Centro*, *Canoas Shopping*, *São Leopoldo Bourbon*) para demonstrar a consulta de estoque por filial em tempo real (`GET /api/stores?product_id=...`).
 
-2. **UC003 - Finalizar Compra e Fluxos Alternativos:**
+3. **UC003 - Finalizar Compra e Medição de Reserva de Estoque (RNF001 $\le$ 60s):**
    - Selecione um produto com estoque na filial ativa e clique em **Retirar na Loja**.
-   - **Teste de Recusa de Cartão (Fluxo 5.1.5.2):** Marque a opção *Simular recusa da Operadora de Cartão* e tente finalizar — a API NestJS (`OperadoraCartaoService`) retornará erro HTTP `402` impedindo a criação do pedido.
+   - **Teste de Recusa de Cartão (Fluxo 5.1.5.2):** Marque *Simular recusa da Operadora de Cartão* e tente finalizar — a API NestJS retornará erro HTTP `402`.
    - **Compra Aprovada com Terceiro Autorizado (Fluxo 5.3.5.1):** Desmarque a simulação de recusa, habilite *Retirada por Terceiro Autorizado*, informe nome e CPF do terceiro e clique em **Finalizar Compra**.
-   - Mostre o comprovante gerado com status `Aguardando Separação` (QR Code bloqueado) e verifique no Supabase que o pedido foi gravado em `public.orders` (com cartão mascarado) e o saldo em `public.inventory` foi decrementado automaticamente.
+   - Consulte `GET /api/metrics/rnf001` para comprovar que tanto `consulta_estoque` quanto `reserva_estoque` responderam muito abaixo do limite de `60000 ms` (60 s), com `compliance_rate_percent: 100`.
 
-3. **UC005 - Separação de Pedido no Balcão (Perfil Operador):**
-   - No cabeçalho, alterne para a visão **Balcão / Operador**.
-   - Em *UC005 Separação de Pedidos*, selecione o pedido recém-criado.
-   - Digite um SKU incorreto para demonstrar a trava de conferência (`400 Bad Request`).
-   - Clique em **Bipar** (ou informe o SKU/código de barras correto do produto) e clique em **Concluir Embalagem**.
-   - Retorne à visão **Cliente**: o status mudou para `Pronto para Retirada` e o **QR Code assinado via HMAC (RNF003)** foi liberado!
+4. **UC005 - Separação de Pedido no Balcão (Perfil Operador):**
+   - Alterne para a visão **Balcão / Operador**, selecione o pedido em *UC005 Separação de Pedidos*, clique em **Bipar** para validar o SKU/código de barras e clique em **Concluir Embalagem**.
+   - Retorne à visão **Cliente**: o status mudou para `Pronto para Retirada` e o **QR Code assinado via HMAC (RNF003)** foi liberado.
 
-4. **UC007 - Validação Presencial da Retirada:**
-   - Volte para **Balcão / Operador** na seção *UC007 Validação Presencial*.
-   - Localize o pedido pelo código do Voucher (`HV-...`) ou pela busca manual de contingência por CPF (Fluxo 5.3.5.2).
-   - Observe o alerta destacando os dados do **Terceiro Autorizado** cadastrado no checkout.
-   - Tente confirmar sem marcar o checkbox de documento para demonstrar a trava de segurança obrigatória.
-   - Marque *Documento físico oficial conferido* e clique em **Validar Retirada & Confirmar Entrega (UC007)**: o pedido é atualizado no Supabase para `entregue_cliente`, encerrando o ciclo.
-
-5. **UC008 - Ponto de Extensão: Ruptura de Estoque e Regra de Abandono:**
-   - Crie um novo pedido na visão **Cliente** e vá para **Balcão / Operador**.
-   - Na esteira de separação, clique em **Registrar Indisponibilidade (UC008)** e informe o motivo: o status muda para `cancelado_ruptura`, o estorno financeiro (`refund_requested = 1`) é registrado em `public.orders` e o estoque do item na filial (`public.inventory`) é zerado no Supabase para impedir novas vendas indevidas.
+5. **UC007 & UC008 - Validação Presencial da Retirada e Ruptura de Estoque:**
+   - Em *UC007 Validação Presencial*, localize o pedido pelo Voucher ou CPF, marque a conferência do documento físico e confirme a entrega (`entregue_cliente`).
+   - Para demonstrar o ponto de extensão *UC008*, crie um novo pedido e clique em **Registrar Indisponibilidade (UC008)** na esteira de separação: o pedido muda para `cancelado_ruptura`, aciona estorno e zera o estoque da filial no Supabase.

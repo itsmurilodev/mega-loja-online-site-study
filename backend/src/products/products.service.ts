@@ -1,12 +1,18 @@
 import { Injectable, InternalServerErrorException } from "@nestjs/common";
+import { performance } from "node:perf_hooks";
 import { ProductRow } from "../common/constants";
+import { RnfMetricsService } from "../common/metrics/rnf-metrics.service";
 import { SupabaseService } from "../supabase/supabase.service";
 
 @Injectable()
 export class ProductsService {
-  constructor(private readonly supabaseService: SupabaseService) {}
+  constructor(
+    private readonly supabaseService: SupabaseService,
+    private readonly rnfMetricsService: RnfMetricsService
+  ) {}
 
   async listProducts(storeId?: string | number | null): Promise<ProductRow[]> {
+    const start = performance.now();
     const supabase = this.supabaseService.client;
 
     const { data: products, error } = await supabase
@@ -48,11 +54,26 @@ export class ProductsService {
         stockByProduct.set(Number(row.product_id), Number(row.quantity));
       }
 
-      return productList.map((product) => ({
+      const result = productList.map((product) => ({
         ...product,
         stock: stockByProduct.get(product.id) ?? 0,
       }));
+
+      this.rnfMetricsService.record(
+        "consulta_estoque",
+        "listProductsWithStock",
+        performance.now() - start,
+        { store_id: parsedStoreId }
+      );
+
+      return result;
     }
+
+    this.rnfMetricsService.record(
+      "consulta_estoque",
+      "listProductsCatalog",
+      performance.now() - start
+    );
 
     return productList;
   }

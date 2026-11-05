@@ -1,6 +1,6 @@
 # Backend do Sistema Central de Click & Collect • Trabalho G2
 
-Backend desenvolvido em **NestJS + TypeScript + Supabase (PostgreSQL)** para a disciplina de **Laboratório de Engenharia de Software** da Universidade LaSalle, estruturado em torno da Sprint do **Trabalho G2**.
+Backend desenvolvido em **NestJS + TypeScript + Supabase (PostgreSQL)** para a disciplina de **Laboratório de Engenharia de Software** da Universidade LaSalle, estruturado em torno das Sprints do **Trabalho G2**.
 
 ## 1. Integrantes e Papéis (Metodologia SCRUM)
 
@@ -12,15 +12,15 @@ Backend desenvolvido em **NestJS + TypeScript + Supabase (PostgreSQL)** para a d
 
 ---
 
-## 2. Tecnologias e Arquitetura
+## 2. Tecnologias, Segurança e Telemetria (Sprint 3)
 
-- **NestJS 10 + TypeScript 5**: Arquitetura modular com injeção de dependências (`Modules`, `Controllers`, `Services`, `DTOs` e `ExceptionFilters`).
+- **NestJS 10 + TypeScript 5**: Arquitetura modular com injeção de dependências (`Modules`, `Controllers`, `Services`, `DTOs`, `Interceptors` e `ExceptionFilters`).
 - **Supabase (`@supabase/supabase-js`)**: Banco de dados PostgreSQL gerenciado em nuvem com *Row Level Security (RLS)* ativo e chaves estrangeiras indexadas.
-- **Padrão BCE (*Boundary, Control, Entity*)**:
-  - *Boundary*: Controllers REST (`AppController`, `StoresController`, `ProductsController`, `OrdersController`) e filtro global `AllExceptionsFilter`.
-  - *Control*: `OrdersService` orquestrando os casos de uso da sprint.
-  - *Entity / Sistemas Externos*: `SupabaseService`, `StoresService` (Sistema de Estoque - S.E.) e `OperadoraCartaoService` (Operadora de Cartão).
-- **Serverless Ready**: Compatível com deploy na Vercel via `api/index.ts` e `vercel.json`.
+- **Sprint 3 — HTTPS em Demo, Segredos Fora do Código e Medição RNF001 ($\le$ 60s)**:
+  - *Critério de aceite a detalhar no Planning da Sprint 3.*
+  - **Segredos Fora do Código (RNF002/RNF003)**: `SUPABASE_URL`, `SUPABASE_ANON_KEY`/`SUPABASE_SERVICE_ROLE_KEY` e `SECRET_TOKEN_KEY` lidos exclusivamente de variáveis de ambiente (`.env` / Vercel Env Vars), sem chaves hardcoded no código-fonte.
+  - **HTTPS em Ambiente de Demo (RNF002)**: Cabeçalho `Strict-Transport-Security` (HSTS) em `vercel.json` e `RnfMetricsInterceptor`, validação `FORCE_HTTPS` e suporte a certificados TLS locais (`HTTPS_KEY_PATH` e `HTTPS_CERT_PATH`).
+  - **Medição de Consulta/Reserva de Estoque $\le$ 60s (RNF001)**: `RnfMetricsService` e `RnfMetricsInterceptor` medem em milissegundos (`performance.now()`) todas as operações de `consulta_estoque` (UC002) e `reserva_estoque` (UC003), expondo métricas em `GET /api/metrics/rnf001`, `GET /api/health`, cabeçalhos HTTP (`X-Response-Time-Ms`, `X-RNF001-Compliant`) e campo `rnf001_telemetry`.
 
 ---
 
@@ -28,87 +28,59 @@ Backend desenvolvido em **NestJS + TypeScript + Supabase (PostgreSQL)** para a d
 
 ```text
 backend/
-├── README.md                            # Documentação técnica do backend
-├── supabase_schema.sql                  # Schema DDL PostgreSQL, índices e políticas RLS
+├── README.md                                    # Documentação técnica do backend
+├── supabase_schema.sql                          # Schema DDL PostgreSQL, índices e políticas RLS
 └── src/
-    ├── main.ts                          # Bootstrap do servidor NestJS (127.0.0.1:5000)
-    ├── app.module.ts                    # Módulo raiz (Root Module)
-    ├── app.controller.ts                # Serve front.html na raiz (/) e expõe /api e /api/health
-    ├── app.service.ts                   # Diagnóstico e metadados da API
+    ├── main.ts                                  # Bootstrap do servidor NestJS (HTTP/HTTPS)
+    ├── app.module.ts                            # Módulo raiz (Root Module)
+    ├── app.controller.ts                        # Rotas /, /api, /api/health e /api/metrics/rnf001
+    ├── app.service.ts                           # Diagnóstico, segurança RNF002 e SLA RNF001
     ├── common/
-    │   ├── constants.ts                 # Variáveis de ambiente, constantes e interfaces TypeScript
-    │   └── filters/
-    │       └── all-exceptions.filter.ts # Padroniza erros HTTP no formato { "error": "..." }
+    │   ├── constants.ts                         # Variáveis de ambiente, constantes e tipos
+    │   ├── filters/
+    │   │   └── all-exceptions.filter.ts         # Padroniza erros HTTP no formato { "error": "..." }
+    │   ├── interceptors/
+    │   │   └── rnf-metrics.interceptor.ts       # HSTS, verificação HTTPS e medição RNF001 (<= 60s)
+    │   └── metrics/
+    │       ├── rnf-metrics.module.ts            # Módulo global de telemetria RNF001
+    │       └── rnf-metrics.service.ts           # Histórico e estatísticas de consulta/reserva de estoque
     ├── supabase/
-    │   ├── supabase.module.ts           # Módulo global (@Global) do Supabase
-    │   └── supabase.service.ts          # Cliente @supabase/supabase-js conectado ao PostgreSQL
+    │   ├── supabase.module.ts                   # Módulo global (@Global) do Supabase
+    │   └── supabase.service.ts                  # Cliente @supabase/supabase-js conectado ao PostgreSQL
     ├── stores/
     │   ├── stores.module.ts
-    │   ├── stores.controller.ts         # GET /api/stores
-    │   └── stores.service.ts            # Filiais + SistemaEstoqueService (UC002, reserva, devolução e ruptura)
+    │   ├── stores.controller.ts                 # GET /api/stores
+    │   └── stores.service.ts                    # Filiais + SistemaEstoqueService (UC002, reserva, devolução e ruptura)
     ├── products/
     │   ├── products.module.ts
-    │   ├── products.controller.ts       # GET /api/products
-    │   └── products.service.ts          # Consulta ao catálogo no Supabase (nome, preço, image_url, SKU, barcode)
+    │   ├── products.controller.ts               # GET /api/products
+    │   └── products.service.ts                  # Consulta ao catálogo no Supabase (nome, preço, image_url, SKU, barcode)
     ├── payments/
     │   ├── payments.module.ts
-    │   └── operadora-cartao.service.ts  # OperadoraCartaoService (Ator 4 - RF003, aprovação e recusa 402)
+    │   └── operadora-cartao.service.ts          # OperadoraCartaoService (Ator 4 - RF003, aprovação e recusa 402)
     └── orders/
         ├── orders.module.ts
-        ├── orders.controller.ts         # Endpoints REST de pedidos e notificações
-        ├── orders.service.ts            # Casos de Uso UC003, UC005, UC007, UC008 e Regra de Abandono
+        ├── orders.controller.ts                 # Endpoints REST de pedidos e notificações
+        ├── orders.service.ts                    # Casos de Uso UC003, UC005, UC007, UC008 e Regra de Abandono
         └── dto/
-            └── order.dto.ts             # DTOs tipados para operações de pedidos
+            └── order.dto.ts                     # DTOs tipados para operações de pedidos
 ```
 
 ---
 
-## 4. Schema do Banco de Dados no Supabase (`public`)
+## 4. Endpoints da API
 
-- **`public.stores`**: Filiais físicas (`id`, `name`, `city`, `zip_code`, `address`, `capacity`, `active`).
-- **`public.products`**: Catálogo de produtos (`id`, `name`, `category`, `price`, `image_url`, `sku`, `barcode`).
-- **`public.inventory`**: Estoque por filial e produto (`store_id`, `product_id`, `quantity`).
-- **`public.orders`**: Pedidos Click & Collect (`id`, `customer_name`, `customer_cpf`, `delivery_method`, `store_id`, `product_id`, `quantity`, `status`, `pickup_code`, `card_number_masked`, `payment_status`, `third_party_name`, `third_party_cpf`, `discount_coupon`, `refund_requested`, `cancellation_reason`, `created_at`, `updated_at`).
-- **`public.notifications`**: Notificações operacionais e do cliente (`id`, `order_id`, `message`, `created_at`).
-
----
-
-## 5. Como Executar Localmente
-
-Na raiz do projeto:
-
-```bash
-# 1. Instalar dependências
-npm install
-
-# 2. Iniciar o servidor NestJS em modo watch (desenvolvimento)
-npm run start:dev
-```
-
-Comandos adicionais disponíveis no `package.json`:
-- `npm start`: Inicia o servidor NestJS.
-- `npm run build`: Compila o projeto TypeScript para `dist/`.
-- `npm run start:prod`: Executa a versão compilada (`node dist/backend/src/main.js`).
-
-A aplicação e a API estarão disponíveis em:
-- **Interface Web (`front.html`)**: `http://127.0.0.1:5000/`
-- **Índice da API**: `http://127.0.0.1:5000/api`
-- **Health Check**: `http://127.0.0.1:5000/api/health`
-
----
-
-## 6. Endpoints da API
-
-| Método | Endpoint | Caso de Uso | Descrição |
+| Método | Endpoint | Caso de Uso / RNF | Descrição |
 | :--- | :--- | :--- | :--- |
-| `GET` | `/api/health` | - | Diagnóstico de integridade da API e conexão Supabase |
+| `GET` | `/api/health` | **RNF001 / RNF002** | Diagnóstico de integridade, verificação de segredos e resumo do SLA RNF001 |
+| `GET` | `/api/metrics/rnf001` | **RNF001 ($\le$ 60s)** | Relatório detalhado de tempos de resposta de consulta e reserva de estoque |
 | `GET` | `/api/stores` | RF001 / UC002 | Lista filiais ativas (aceita `?city=` e `?product_id=` para estoque) |
 | `GET` | `/api/products` | RF002 | Lista produtos do Supabase com `price`, `image_url`, `sku` e `barcode` |
 | `GET` | `/api/orders` | RF005 | Lista pedidos com join de produto e filial (`?store_id=` e `?status=`) |
 | `GET` | `/api/orders/:id` | RF005 | Detalhes completos de um pedido específico |
 | `GET` | `/api/orders/:id/notifications` | RF004 | Histórico de notificações do pedido |
-| `POST` | `/api/orders` | **UC003** | Finalizar compra, validar estoque (UC002), cobrar cartão e reservar item |
-| `POST` | `/api/orders/:id/separate` | **UC005** | Conferir SKU/código de barras, embalar e gerar QR Code assinado (UC006) |
+| `POST` | `/api/orders` | **UC003 / RNF001** | Finalizar compra, validar/reservar estoque ($\le$ 60s) e cobrar cartão |
+| `POST` | `/api/orders/:id/separate` | **UC005 / RNF003** | Conferir SKU/código de barras, embalar e gerar QR Code assinado |
 | `POST` | `/api/orders/:id/rupture` | **UC008** | Registrar ruptura na prateleira, zerar estoque local e solicitar estorno |
 | `POST` | `/api/orders/validate-pickup` | **UC007** | Validar retirada presencial (QR Code ou CPF) com conferência de documento |
 | `POST` | `/api/orders/:id/expire` | Abandono | Expirar pedido por não-comparecimento (7 dias) e devolver item ao estoque |

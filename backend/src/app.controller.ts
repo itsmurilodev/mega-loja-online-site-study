@@ -49,4 +49,9 @@ export class AppController {
   getHealth() {
     return this.appService.getHealth();
   }
+
+  @Get("api/metrics/rnf001")
+  getRnf001Metrics() {
+    return this.appService.getRnf001Metrics();
+  }
 }

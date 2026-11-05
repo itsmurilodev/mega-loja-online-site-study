@@ -44,6 +44,11 @@ export class OrdersService {
    * Formato amigável: HV-[ID]-XXXX-XXXX
    */
   private generatePickupCode(orderId: number): string {
+    if (!SECRET_TOKEN_KEY) {
+      throw new InternalServerErrorException(
+        "SECRET_TOKEN_KEY ausente nas variáveis de ambiente (RNF002/RNF003: segredos fora do código)."
+      );
+    }
     const salt = crypto.randomBytes(4).toString("hex").toUpperCase();
     const signature = crypto
       .createHmac("sha256", Buffer.from(SECRET_TOKEN_KEY, "utf-8"))
