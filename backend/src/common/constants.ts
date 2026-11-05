@@ -33,12 +33,13 @@ loadEnvFile();
 export const HOST = process.env.HOST || "127.0.0.1";
 export const PORT = Number(process.env.PORT || 5000);
 
-export const SUPABASE_URL = process.env.SUPABASE_URL || "";
+export const SUPABASE_URL =
+  process.env.SUPABASE_URL || "https://oubrzbmjsqlpgnrjngku.supabase.co";
 export const SUPABASE_KEY =
   process.env.SUPABASE_SERVICE_ROLE_KEY ||
   process.env.SUPABASE_ANON_KEY ||
   process.env.SUPABASE_KEY ||
-  "";
+  "sb_publishable_Lsh8OOq6v-cnpsHi7MABjA_dKADD-kz";
 
 // Chave interna para geração de voucher autenticado (RNF003: Autenticidade do Voucher)
 export const SECRET_TOKEN_KEY =

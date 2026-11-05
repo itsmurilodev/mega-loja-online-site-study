@@ -642,8 +642,11 @@
 
     <!-- LÓGICA E INTEGRAÇÃO JAVASCRIPT (CLEAN CODE) -->
     <script>
-        const isLocalFrontend = ['localhost', '127.0.0.1', ''].includes(window.location.hostname);
-        const API_BASE_URL = isLocalFrontend ? 'http://127.0.0.1:5000' : '';
+        const isFileProtocol = window.location.protocol === 'file:';
+        const isLocalHost = ['localhost', '127.0.0.1', ''].includes(window.location.hostname);
+        const API_BASE_URL = (isFileProtocol || (isLocalHost && window.location.port !== '5000'))
+            ? 'http://127.0.0.1:5000'
+            : '';
 
         // Estado Global da Aplicação
         let dbProdutos = [];

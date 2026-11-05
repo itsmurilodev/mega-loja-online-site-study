@@ -33,6 +33,9 @@ export default async function handler(
     const cleanPath = `/api/${rewrittenPath}`.replace(/\/+$/, "") || "/api";
     const remainingQuery = parsed.searchParams.toString();
     req.url = remainingQuery ? `${cleanPath}?${remainingQuery}` : cleanPath;
+  } else if (parsed.pathname === "/api/index") {
+    const remainingQuery = parsed.searchParams.toString();
+    req.url = remainingQuery ? `/api?${remainingQuery}` : "/api";
   }
 
   const app = await getNestApp();
