@@ -1,11 +1,20 @@
 # Documentos Privados
 docs/
 
-# Banco de dados local
+# Dependências e Build TypeScript/Node
+node_modules/
+dist/
+
+# Variáveis de Ambiente
+.env
+.env.local
+.env.*.local
+
+# Banco de dados local legado
 backend/*.db
 *.db
 
-# Python
+# Python legado
 backend/__pycache__/
 __pycache__/
 *.pyc
