@@ -1,6 +1,8 @@
 import "reflect-metadata";
 import { NestFactory } from "@nestjs/core";
+import { NestExpressApplication } from "@nestjs/platform-express";
 import fs from "node:fs";
+import path from "node:path";
 import { AppModule } from "./app.module";
 import {
   HOST,
@@ -22,7 +24,7 @@ export async function bootstrap(): Promise<void> {
       }
     : undefined;
 
-  const app = await NestFactory.create(
+  const app = await NestFactory.create<NestExpressApplication>(
     AppModule,
     httpsOptions ? { httpsOptions } : undefined
   );
@@ -34,6 +36,8 @@ export async function bootstrap(): Promise<void> {
     exposedHeaders:
       "X-Response-Time-Ms, X-RNF001-SLA-Limit-Ms, X-RNF001-Compliant, X-Transport-Security-Protocol",
   });
+
+  app.useStaticAssets(path.resolve(process.cwd(), "frontend"), { index: false });
 
   await app.listen(PORT, HOST);
   const protocol = hasLocalTls ? "https" : "http";

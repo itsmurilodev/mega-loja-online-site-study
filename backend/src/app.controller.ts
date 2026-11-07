@@ -10,6 +10,8 @@ export class AppController {
 
   private serveFrontHtml(res: Response): void {
     const candidates = [
+      path.resolve(process.cwd(), "frontend", "front.html"),
+      path.resolve(__dirname, "..", "..", "frontend", "front.html"),
       path.resolve(process.cwd(), "front.html"),
       path.resolve(__dirname, "..", "..", "front.html"),
     ];
