@@ -31,21 +31,12 @@
     }
   ],
   "rewrites": [
-    {
-      "source": "/",
-      "destination": "/front.html"
-    },
-    {
-      "source": "/index.html",
-      "destination": "/front.html"
-    },
-    {
-      "source": "/api",
-      "destination": "/api/index"
-    },
-    {
-      "source": "/api/:path*",
-      "destination": "/api/index?path=:path*"
-    }
+    { "source": "/", "destination": "/frontend/front.html" },
+    { "source": "/index.html", "destination": "/frontend/front.html" },
+    { "source": "/front.html", "destination": "/frontend/front.html" },
+    { "source": "/css/:path*", "destination": "/frontend/css/:path*" },
+    { "source": "/js/:path*", "destination": "/frontend/js/:path*" },
+    { "source": "/api", "destination": "/api/index" },
+    { "source": "/api/:path*", "destination": "/api/index?path=:path*" }
   ]
 }
