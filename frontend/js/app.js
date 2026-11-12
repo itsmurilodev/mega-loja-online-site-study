@@ -104,6 +104,7 @@
                 grid.innerHTML = `
                     <div class="col-span-full text-center py-16 bg-white rounded-2xl border border-gray-200 text-gray-400 font-medium text-xs">
                         <i class="fa-solid fa-box-open text-4xl block mb-2 text-gray-300"></i> Nenhum produto encontrado para estes filtros.
+                        <button onclick="limparFiltrosVitrine()" class="block mx-auto mt-3 text-blue-600 hover:text-blue-800 font-bold underline">Limpar busca e filtros</button>
                     </div>`;
                 return;
             }
@@ -243,7 +244,42 @@
         }
 
         function filtrarPorNome() {
+            // Quem digita na busca estando na pagina do produto volta para a vitrine.
+            if (!document.getElementById('aba-detalhe').classList.contains('hidden')) {
+                mudarAba('vitrine');
+            }
             executarFiltrosCombinados();
+        }
+
+        // S2-11: busca sem diferenciar maiusculas nem acentos ("eletronicos" acha "Eletrônicos").
+        function normalizarTexto(texto) {
+            return String(texto)
+                .toLowerCase()
+                .normalize('NFD')
+                .replace(/[\u0300-\u036f]/g, '');
+        }
+
+        function produtoCombinaComBusca(produto, termos) {
+            const textoDoProduto = normalizarTexto(
+                `${produto.nome} ${produto.categoria} ${produto.sku} ${produto.barcode}`
+            );
+            return termos.every(termo => textoDoProduto.includes(termo));
+        }
+
+        const ORDENACOES_VITRINE = {
+            'menor-preco': (a, b) => a.preco - b.preco,
+            'maior-preco': (a, b) => b.preco - a.preco,
+            'nome': (a, b) => a.nome.localeCompare(b.nome, 'pt-BR'),
+            'estoque': (a, b) => (b.estoques[lojaAtiva.id] || 0) - (a.estoques[lojaAtiva.id] || 0)
+        };
+
+        function limparFiltrosVitrine() {
+            document.getElementById('input-busca').value = '';
+            document.getElementById('filtro-com-estoque').checked = false;
+            document.getElementById('ordenacao-vitrine').value = 'padrao';
+            document.querySelector('input[name="filtro-preco"][value="todos"]').checked = true;
+            filtroPrecoAtivo = 'todos';
+            filtrarCategoria('todos');
         }
 
         function executarFiltrosCombinados() {
@@ -258,9 +294,18 @@
             } else if (filtroPrecoAtivo === 'acima2000') {
                 resultado = resultado.filter(p => p.preco > 2000);
             }
-            const query = document.getElementById('input-busca').value.toLowerCase().trim();
-            if (query) {
-                resultado = resultado.filter(p => p.nome.toLowerCase().includes(query) || p.sku.toLowerCase().includes(query));
+            const termos = normalizarTexto(document.getElementById('input-busca').value)
+                .split(/\s+/)
+                .filter(Boolean);
+            if (termos.length > 0) {
+                resultado = resultado.filter(p => produtoCombinaComBusca(p, termos));
+            }
+            if (document.getElementById('filtro-com-estoque').checked) {
+                resultado = resultado.filter(p => (p.estoques[lojaAtiva.id] || 0) > 0);
+            }
+            const comparar = ORDENACOES_VITRINE[document.getElementById('ordenacao-vitrine').value];
+            if (comparar) {
+                resultado = [...resultado].sort(comparar);
             }
             renderizarVitrine(resultado);
         }
