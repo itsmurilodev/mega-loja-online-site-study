@@ -127,6 +127,23 @@ Abra diretamente no navegador:
 
 ---
 
+### Testes de contrato da API (S2-07)
+
+Os testes em `tests/contract/` falam com a API só por HTTP (Vitest + `fetch`), então rodam contra qualquer ambiente:
+
+```bash
+# API local (padrão http://127.0.0.1:5000)
+npm test
+
+# Outro ambiente
+API_URL=https://study-mega-loja-online-site.vercel.app npm test
+```
+
+Por padrão rodam só as consultas e as recusas, que não gravam nada. Duas variáveis liberam o resto:
+
+- `CONTRACT_WRITE=1`: fluxos que criam pedidos (compra, separação, retirada, expiração). Deixam pedidos de teste no banco e consomem 1 unidade de estoque.
+- `CONTRACT_DESTRUCTIVE=1` (junto com a anterior): teste de ruptura (UC008), que **zera o estoque** do produto na filial usada. Só em banco descartável.
+
 ## 8. Roteiro da Demo (Apresentação da Sprint)
 
 Este roteiro guia a demonstração completa da arquitetura **NestJS + TypeScript + Supabase**:
