@@ -139,6 +139,73 @@
             });
         }
 
+        // RF006 (S2-19): descricao, garantia e ficha tecnica.
+        // Dados de exemplo guardados no front, indexados pelo SKU do catalogo.
+        const FICHAS_PRODUTO = {
+            'SKU-TV-55': {
+                descricao: 'Smart TV de 55 polegadas com resolução 4K e HDR, que deixa filmes e jogos com mais contraste e cores vivas. Conecta por Wi-Fi e Bluetooth e já vem com os principais aplicativos de streaming.',
+                garantia: '12 meses de garantia do fabricante contra defeitos de fabricação.',
+                ficha: { 'Dimensões (L x A x P)': '123,1 x 71,0 x 6,0 cm (sem base)', 'Peso': '14,2 kg', 'Voltagem': 'Bivolt (100 a 240 V)', 'Cor': 'Preto', 'Material': 'Gabinete em plástico ABS, painel LED' }
+            },
+            'SKU-SMART-5G': {
+                descricao: 'Smartphone 5G com 256 GB de armazenamento e câmera tripla para fotos nítidas de dia e de noite. Tela ampla, bateria para o dia inteiro e carregamento rápido.',
+                garantia: '12 meses de garantia do fabricante (90 dias para o carregador e o cabo).',
+                ficha: { 'Dimensões (L x A x P)': '7,6 x 16,3 x 0,8 cm', 'Peso': '195 g', 'Voltagem': 'Carregador bivolt (100 a 240 V)', 'Cor': 'Preto grafite', 'Material': 'Vidro e alumínio' }
+            },
+            'SKU-FURAD-12': {
+                descricao: 'Furadeira de impacto profissional com mandril de 1/2 polegada e função reversível, para furar madeira, metal e alvenaria. Empunhadura lateral e limitador de profundidade inclusos.',
+                garantia: '6 meses de garantia do fabricante.',
+                ficha: { 'Dimensões (L x A x P)': '28,0 x 21,0 x 7,5 cm', 'Peso': '1,9 kg', 'Voltagem': '127 V', 'Cor': 'Vermelho e preto', 'Material': 'Corpo em polímero reforçado, mandril em aço' }
+            },
+            'SKU-MALETA-142': {
+                descricao: 'Maleta com 142 peças em aço cromo vanádio: soquetes, catracas, chaves combinadas, alicates e bits. Organizada em estojo rígido com trava, para oficina ou manutenção doméstica.',
+                garantia: '3 meses de garantia legal contra defeitos de fabricação.',
+                ficha: { 'Dimensões (L x A x P)': '44,0 x 33,0 x 10,0 cm', 'Peso': '8,7 kg', 'Voltagem': 'Não se aplica', 'Cor': 'Preto e laranja', 'Material': 'Aço cromo vanádio, estojo em polipropileno' }
+            },
+            'SKU-GELAD-410': {
+                descricao: 'Geladeira duplex frost free de 410 litros com acabamento inox e painel digital externo. Prateleiras de vidro temperado e gavetão para frutas e legumes.',
+                garantia: '12 meses de garantia do fabricante (10 anos para o compressor).',
+                ficha: { 'Dimensões (L x A x P)': '70,0 x 186,0 x 73,0 cm', 'Peso': '72 kg', 'Voltagem': '127 V ou 220 V (conferir na retirada)', 'Cor': 'Inox', 'Material': 'Aço com acabamento inox, prateleiras em vidro temperado' }
+            },
+            'SKU-SOFA-SUEDE': {
+                descricao: 'Sofá retrátil de 3 lugares revestido em tecido suede, com assentos que avançam e encosto reclinável. Espuma de alta densidade para uso diário.',
+                garantia: '12 meses de garantia para a estrutura e 3 meses para o tecido.',
+                ficha: { 'Dimensões (L x A x P)': '230 x 95 x 110 cm (fechado)', 'Peso': '68 kg', 'Voltagem': 'Não se aplica', 'Cor': 'Verde', 'Material': 'Estrutura em eucalipto, revestimento em suede' }
+            }
+        };
+
+        const FICHA_NAO_CADASTRADA = {
+            descricao: 'Descrição detalhada ainda não cadastrada para este produto.',
+            garantia: '3 meses de garantia legal (Código de Defesa do Consumidor).',
+            ficha: {}
+        };
+
+        function renderizarFichaProduto(produto) {
+            const dados = FICHAS_PRODUTO[produto.sku] || FICHA_NAO_CADASTRADA;
+
+            document.getElementById('detalhe-descricao').textContent = dados.descricao;
+            document.getElementById('detalhe-garantia').textContent = dados.garantia;
+
+            const lista = document.getElementById('detalhe-ficha-tecnica');
+            lista.replaceChildren();
+            const itens = Object.entries(dados.ficha);
+            if (itens.length === 0) {
+                itens.push(['Ficha técnica', 'Não cadastrada']);
+            }
+            itens.forEach(([rotulo, valor]) => {
+                const linha = document.createElement('div');
+                linha.className = 'flex justify-between gap-4 px-3 py-2';
+                const termo = document.createElement('dt');
+                termo.className = 'text-gray-500 font-semibold shrink-0';
+                termo.textContent = rotulo;
+                const descricao = document.createElement('dd');
+                descricao.className = 'text-gray-900 font-medium text-right';
+                descricao.textContent = valor;
+                linha.append(termo, descricao);
+                lista.appendChild(linha);
+            });
+        }
+
         function carregarDetalhesProduto(id) {
             produtoSelecionado = dbProdutos.find(p => p.id === id);
             if (!produtoSelecionado) return;
@@ -149,6 +216,7 @@
             document.getElementById('detalhe-codigos').innerText = `SKU: ${produtoSelecionado.sku} | Cód. Barras: ${produtoSelecionado.barcode}`;
             document.getElementById('detalhe-imagem').src = produtoSelecionado.img;
             document.getElementById('detalhe-imagem').alt = produtoSelecionado.nome;
+            renderizarFichaProduto(produtoSelecionado);
 
             atualizarLayoutFocoLoja();
             mudarAba('detalhe');
