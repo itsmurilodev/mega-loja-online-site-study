@@ -98,7 +98,6 @@ export class OrdersService {
       payment_status: row.payment_status ?? null,
       third_party_name: row.third_party_name ?? null,
       third_party_cpf: row.third_party_cpf ?? null,
-      discount_coupon: row.discount_coupon ?? null,
       refund_requested: Number(row.refund_requested ?? 0),
       cancellation_reason: row.cancellation_reason ?? null,
       created_at: row.created_at,
@@ -152,7 +151,7 @@ export class OrdersService {
       `
         id, customer_name, customer_cpf, delivery_method, store_id,
         product_id, quantity, status, pickup_code, third_party_name,
-        third_party_cpf, discount_coupon, refund_requested, cancellation_reason,
+        third_party_cpf, refund_requested, cancellation_reason,
         created_at, updated_at,
         products (id, name, image_url, sku, barcode),
         stores (id, name)

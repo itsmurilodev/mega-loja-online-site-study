@@ -109,7 +109,6 @@ export interface OrderView {
   payment_status?: string | null;
   third_party_name: string | null;
   third_party_cpf: string | null;
-  discount_coupon: string | null;
   refund_requested: number;
   cancellation_reason: string | null;
   created_at: string;

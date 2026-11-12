@@ -44,7 +44,6 @@ CREATE TABLE IF NOT EXISTS public.orders (
     payment_status TEXT DEFAULT 'aprovado',
     third_party_name TEXT,
     third_party_cpf TEXT,
-    discount_coupon TEXT,
     refund_requested INTEGER DEFAULT 0,
     cancellation_reason TEXT,
     created_at TEXT NOT NULL,
