@@ -33,6 +33,10 @@
   ],
   "rewrites": [
     { "source": "/", "destination": "/frontend/front.html" },
+    { "source": "/cliente", "destination": "/frontend/front.html" },
+    { "source": "/operador", "destination": "/frontend/front.html" },
+    { "source": "/balcao", "destination": "/frontend/front.html" },
+    { "source": "/admin", "destination": "/frontend/front.html" },
     { "source": "/index.html", "destination": "/frontend/front.html" },
     { "source": "/front.html", "destination": "/frontend/front.html" },
     { "source": "/css/:path*", "destination": "/frontend/css/:path*" },

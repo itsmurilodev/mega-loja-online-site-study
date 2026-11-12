@@ -14,7 +14,7 @@
 
     <!-- BARRA SUPERIOR INSTITUCIONAL (TRABALHO G2 - UNILASALLE) -->
     <div class="bg-blue-900 text-white text-xs py-2 px-4 shadow-sm">
-        <div class="container mx-auto max-w-7xl flex flex-col sm:flex-row justify-between items-center gap-1">
+        <div class="container mx-auto max-w-7xl flex flex-col sm:flex-row justify-between items-center gap-2">
             <div class="flex items-center space-x-3 text-[11px]">
                 <span class="font-bold flex items-center gap-1 text-blue-300">
                     <i class="fa-solid fa-graduation-cap text-amber-400"></i> Universidade LaSalle
@@ -24,18 +24,28 @@
                 <span class="hidden md:inline text-gray-400">|</span>
                 <span class="hidden md:inline text-gray-300">Sistema Central Click & Collect</span>
             </div>
-            <div class="flex items-center space-x-2 text-[10px]">
-                <span class="bg-blue-800 text-blue-200 px-2 py-0.5 rounded font-mono">Scrum: Murilo (SM), João (PO), Leo & Gui (Dev), Júlia (Testes)</span>
+            <div class="flex items-center flex-wrap gap-2 text-[10px]">
+                <span class="bg-blue-800 text-blue-200 px-2 py-0.5 rounded font-mono hidden lg:inline">Scrum: Murilo (SM), João (PO), Leo & Gui (Dev), Júlia (Testes)</span>
+                
+                <!-- Roteamento Explícito: Rota do Cliente vs Rota do Operador/Admin -->
+                <div class="flex items-center bg-blue-950/90 rounded-xl p-0.5 border border-blue-700/60 shadow-inner">
+                    <button id="pill-rota-cliente" onclick="navegarPara('/cliente')" class="px-2.5 py-1 rounded-lg font-bold transition-all flex items-center gap-1.5 bg-white text-blue-950 shadow-sm" title="Ir para a Rota do Cliente">
+                        <i class="fa-solid fa-cart-shopping text-blue-600"></i> Loja Cliente <span class="hidden sm:inline font-mono text-[9px] opacity-75">(/cliente)</span>
+                    </button>
+                    <button id="pill-rota-operador" onclick="navegarPara('/operador')" class="px-2.5 py-1 rounded-lg font-bold transition-all flex items-center gap-1.5 text-blue-200 hover:text-white" title="Ir para a Rota do Operador / Balcão (Admin)">
+                        <i class="fa-solid fa-dolly text-amber-400"></i> Balcão Operador <span class="hidden sm:inline font-mono text-[9px] opacity-75">(/operador)</span>
+                    </button>
+                </div>
             </div>
         </div>
     </div>
 
-    <!-- CABEÇALHO PRINCIPAL COM SELEÇÃO DE VISÃO E LOJA -->
-    <header class="bg-white shadow-md sticky top-0 z-40">
+    <!-- CABEÇALHO DA ROTA DO CLIENTE -->
+    <header id="header-cliente" class="bg-white shadow-md sticky top-0 z-40 transition-all">
         <div class="border-b border-gray-200">
             <div class="container mx-auto px-4 py-3.5 flex flex-col lg:flex-row justify-between items-center max-w-7xl gap-4">
                 
-                <div class="flex items-center space-x-3 cursor-pointer select-none" onclick="mudarAba('vitrine')">
+                <div class="flex items-center space-x-3 cursor-pointer select-none" onclick="navegarPara('/cliente'); mudarAba('vitrine');">
                     <div class="bg-blue-600 text-white p-2 rounded-xl font-black tracking-tight text-lg shadow-md shadow-blue-600/20 flex items-center justify-center">
                         <i class="fa-solid fa-building-flag mr-2 text-amber-300"></i> MEGA LOJA
                         <span class="text-[10px] bg-white text-blue-700 px-1.5 py-0.5 rounded ml-2 font-bold uppercase tracking-wider">Click & Collect</span>
@@ -61,15 +71,48 @@
                         </div>
                     </div>
 
-                    <!-- Seletor de Papéis (Cliente vs Operador de Retaguarda) -->
-                    <div class="bg-gray-100 p-1 rounded-xl flex border border-gray-200 text-xs shadow-inner">
-                        <button id="btn-visao-cliente" onclick="alternarAtor('cliente')" class="bg-white text-gray-900 font-bold px-3 py-1.5 rounded-lg shadow-sm transition-all flex items-center gap-1.5">
-                            <i class="fa-solid fa-user text-blue-600"></i> Cliente
-                        </button>
-                        <button id="btn-visao-balcao" onclick="alternarAtor('balcao')" class="text-gray-500 hover:text-gray-900 font-semibold px-3 py-1.5 rounded-lg transition-all flex items-center gap-1.5">
-                            <i class="fa-solid fa-dolly text-amber-600"></i> Balcão / Operador
+                    <!-- Botão Carrinho -->
+                    <button onclick="abrirCarrinho()" class="flex items-center space-x-2 bg-gray-100 hover:bg-blue-50 text-gray-800 hover:text-blue-600 px-3 py-2 rounded-xl text-xs font-bold transition-all border border-gray-200 shadow-sm" title="Ver Carrinho">
+                        <i class="fa-solid fa-cart-shopping text-blue-600 text-sm"></i>
+                        <span class="hidden sm:inline">Carrinho</span>
+                        <span id="nav-carrinho-badge" class="bg-blue-600 text-white text-[10px] font-black px-1.5 py-0.5 rounded-full leading-none">0</span>
+                    </button>
+
+                    <!-- Área de Autenticação do Cliente (Login & Senha / Cadastro) -->
+                    <div id="auth-cliente-deslogado" class="flex items-center">
+                        <button onclick="abrirModalAuthCliente('login')" class="bg-blue-600 hover:bg-blue-700 text-white font-bold px-3 py-2 rounded-xl text-xs shadow-sm transition-all flex items-center gap-1.5 hover:shadow">
+                            <i class="fa-solid fa-circle-user text-sm"></i>
+                            <span>Entrar / Cadastrar</span>
                         </button>
                     </div>
+
+                    <div id="auth-cliente-logado" class="hidden relative group">
+                        <button class="bg-blue-50 border border-blue-200 text-blue-900 font-bold px-3 py-1.5 rounded-xl shadow-sm text-xs flex items-center gap-2 hover:bg-blue-100 transition-all">
+                            <div class="w-6 h-6 rounded-full bg-blue-600 text-white flex items-center justify-center text-[10px] font-black">
+                                <i class="fa-solid fa-user"></i>
+                            </div>
+                            <div class="text-left leading-tight">
+                                <span class="text-[9px] text-gray-500 block font-medium">Cliente</span>
+                                <span id="nav-cliente-nome" class="text-xs font-black text-blue-950">Murilo Alves</span>
+                            </div>
+                            <i class="fa-solid fa-chevron-down text-[9px] text-gray-400 group-hover:rotate-180 transition-transform"></i>
+                        </button>
+                        <div class="absolute right-0 mt-1 w-56 bg-white border border-gray-200 rounded-xl shadow-xl py-2 z-50 text-xs hidden group-hover:block transition-all">
+                            <div class="px-4 py-2 border-b border-gray-100">
+                                <p class="text-[9px] text-gray-400 uppercase font-black tracking-wider">Conta do Cliente</p>
+                                <p id="menu-cliente-email" class="font-bold text-gray-800 truncate">murilo@unilasalle.edu.br</p>
+                                <p id="menu-cliente-cpf" class="text-[10px] text-gray-500 font-mono mt-0.5">CPF: 123.456.789-00</p>
+                            </div>
+                            <a href="javascript:void(0)" onclick="abrirMeusPedidos()" class="flex items-center gap-2 px-4 py-2.5 hover:bg-blue-50 text-gray-700 font-semibold transition-colors">
+                                <i class="fa-solid fa-receipt text-blue-600"></i> Acompanhar Pedido / Voucher
+                            </a>
+                            <div class="border-t border-gray-100 my-1"></div>
+                            <a href="javascript:void(0)" onclick="logoutCliente()" class="flex items-center gap-2 px-4 py-2.5 hover:bg-red-50 text-red-600 font-semibold transition-colors">
+                                <i class="fa-solid fa-right-from-bracket"></i> Desconectar Conta
+                            </a>
+                        </div>
+                    </div>
+
                 </div>
 
             </div>
@@ -89,6 +132,58 @@
                 </button>
                 <button onclick="filtrarCategoria('eletrodomesticos')" id="cat-eletrodomesticos" class="hover:bg-blue-700 px-3 py-1 rounded-lg transition-colors whitespace-nowrap">
                     <i class="fa-solid fa-couch mr-1"></i> Eletrodomésticos
+                </button>
+            </div>
+        </div>
+    </header>
+
+    <!-- CABEÇALHO DA ROTA DO OPERADOR / BALCÃO (ADMIN) -->
+    <header id="header-operador" class="bg-slate-900 text-white shadow-lg sticky top-0 z-40 hidden border-b border-slate-800">
+        <div class="container mx-auto px-4 py-3 flex flex-col md:flex-row justify-between items-center max-w-7xl gap-3">
+            <div class="flex items-center space-x-3 cursor-pointer" onclick="navegarPara('/operador')">
+                <div class="bg-amber-500 text-slate-950 p-2.5 rounded-xl font-black text-sm flex items-center justify-center shadow-lg shadow-amber-500/20">
+                    <i class="fa-solid fa-dolly mr-2 text-base"></i> OPERADOR & BALCÃO
+                </div>
+                <div>
+                    <div class="flex items-center gap-2">
+                        <p class="text-xs font-black tracking-tight text-white uppercase">Portal Administrativo Click & Collect</p>
+                        <span class="bg-amber-400/20 text-amber-300 border border-amber-400/30 text-[9px] font-mono px-2 py-0.5 rounded-full font-bold">ADMIN / BALCÃO</span>
+                    </div>
+                    <p class="text-[10px] text-slate-400">Retaguarda de separação física (UC005) e conferência presencial (UC007)</p>
+                </div>
+            </div>
+
+            <div class="flex items-center flex-wrap justify-center gap-3">
+                <!-- Filial Operacional -->
+                <div class="flex items-center space-x-2 bg-slate-800 border border-slate-700 px-3 py-1.5 rounded-xl cursor-pointer hover:border-amber-400 transition-colors" onclick="abrirModalLoja()" title="Alterar filial de operação">
+                    <div class="bg-slate-700 p-1.5 rounded-lg">
+                        <i class="fa-solid fa-shop text-amber-400 text-xs"></i>
+                    </div>
+                    <div class="text-left">
+                        <p class="text-[8px] text-slate-400 font-extrabold uppercase">Unidade Operacional:</p>
+                        <p id="nav-loja-operador-nome" class="text-xs font-bold text-slate-100">Canoas Centro</p>
+                    </div>
+                </div>
+
+                <!-- Dados do Operador Autenticado -->
+                <div id="box-operador-identificacao" class="flex items-center space-x-2 bg-slate-800/90 border border-slate-700 px-3 py-1.5 rounded-xl text-xs">
+                    <div class="w-7 h-7 rounded-full bg-amber-500 text-slate-950 flex items-center justify-center font-bold text-xs shadow-inner">
+                        <i class="fa-solid fa-user-shield"></i>
+                    </div>
+                    <div>
+                        <span id="txt-operador-nome-badge" class="font-bold text-slate-100 block text-[11px] leading-tight">Operador: Murilo Alves</span>
+                        <span id="txt-operador-matricula" class="text-[9px] text-amber-400 font-mono block">Matrícula: OP-2024</span>
+                    </div>
+                </div>
+
+                <!-- Botão Sair / Bloquear Sessão do Operador -->
+                <button onclick="logoutOperador()" class="bg-red-500/10 hover:bg-red-500/20 text-red-300 border border-red-500/30 px-3 py-1.5 rounded-xl text-xs font-semibold flex items-center gap-1.5 transition-colors" title="Encerrar sessão de operador">
+                    <i class="fa-solid fa-lock"></i> <span>Sair</span>
+                </button>
+
+                <!-- Atalho para voltar à Loja Cliente -->
+                <button onclick="navegarPara('/cliente')" class="bg-blue-600 hover:bg-blue-700 text-white px-3 py-1.5 rounded-xl text-xs font-semibold flex items-center gap-1.5 transition-colors shadow-sm" title="Abrir rota da loja do cliente">
+                    <i class="fa-solid fa-store"></i> <span>Loja Cliente</span>
                 </button>
             </div>
         </div>
@@ -148,20 +243,6 @@
                         </label>
                     </div>
                 </div>
-
-                <hr class="border-gray-200">
-
-                <div class="bg-blue-50/50 border border-blue-100 rounded-xl p-3.5 space-y-2 text-xs">
-                    <p class="font-bold text-blue-900 flex items-center gap-1.5">
-                        <i class="fa-solid fa-code-branch text-blue-600"></i> Casos de Uso do G2
-                    </p>
-                    <ul class="text-[11px] text-gray-600 space-y-1 list-disc list-inside">
-                        <li><strong class="text-gray-800">UC003:</strong> Finalizar Compra</li>
-                        <li><strong class="text-gray-800">UC005:</strong> Separar Pedido (Balcão)</li>
-                        <li><strong class="text-gray-800">UC007:</strong> Validar Retirada</li>
-                        <li><strong class="text-gray-800">UC008:</strong> Registrar Ruptura</li>
-                    </ul>
-                </div>
             </div>
 
             <!-- Grid de Produtos -->
@@ -195,7 +276,7 @@
 
 
         <!-- ============================================================== -->
-        <!-- ABA 2: CHECKOUT DETALHADO DO PEDIDO (UC003 - FINALIZAR COMPRA) -->
+        <!-- ABA 2: PÁGINA DO PRODUTO (PREÇO, PIX COM DESCONTO E 12X)      -->
         <!-- ============================================================== -->
         <section id="aba-detalhe" class="hidden grid grid-cols-1 lg:grid-cols-12 gap-8 items-start transition-all duration-300">
             <div class="lg:col-span-12">
@@ -205,7 +286,7 @@
             </div>
 
             <!-- Imagem e Ficha Técnica do Item -->
-            <div class="lg:col-span-6 bg-white border border-gray-200 rounded-2xl p-6 flex flex-col items-center justify-center shadow-sm relative min-h-[420px]">
+            <div class="lg:col-span-7 bg-white border border-gray-200 rounded-2xl p-6 flex flex-col items-center justify-center shadow-sm relative min-h-[420px]">
                 <div class="absolute top-4 left-4 bg-emerald-50 text-emerald-700 text-[10px] font-black px-2.5 py-1 rounded-lg border border-emerald-100 flex items-center gap-1">
                     <i class="fa-solid fa-store text-emerald-600"></i> Click & Collect Habilitado
                 </div>
@@ -237,110 +318,272 @@
                 </div>
             </div>
 
-            <!-- Formulário de Checkout com Padrão BCE (UC003) -->
-            <div class="lg:col-span-6 bg-white border border-gray-200 rounded-2xl p-6 shadow-sm space-y-5">
+            <!-- Card de Preço e Compra -->
+            <div class="lg:col-span-5 bg-white border border-gray-200 rounded-2xl p-6 shadow-sm space-y-5">
                 
-                <!-- Preço e Modalidade de Frete -->
-                <div class="bg-gradient-to-br from-gray-50 to-slate-50 p-4 rounded-xl border border-gray-100 flex justify-between items-center">
+                <!-- Bloco de Preço, Pix e Parcelamento -->
+                <div class="bg-gradient-to-br from-gray-50 via-slate-50 to-blue-50/40 p-5 rounded-2xl border border-gray-100 space-y-4">
+                    <!-- Preço Normal / De tabela -->
                     <div>
-                        <span class="text-[10px] text-gray-400 font-bold uppercase">Preço Total</span>
-                        <div class="flex items-baseline space-x-2">
-                            <span id="detalhe-preco" class="text-2xl font-black text-slate-950">R$ 0,00</span>
+                        <span class="text-[10px] text-gray-400 font-bold uppercase tracking-wider block">Preço</span>
+                        <div class="flex items-baseline gap-2 mt-0.5">
+                            <span id="detalhe-preco" class="text-xl font-bold text-gray-700">R$ 0,00</span>
                         </div>
                     </div>
-                    <div class="text-right">
-                        <span class="text-[10px] font-black uppercase text-emerald-700 bg-emerald-100 px-2 py-1 rounded-lg">Frete R$ 0,00 (Grátis)</span>
+
+                    <!-- Desconto com PIX de 5% e o valor com desconto -->
+                    <div class="bg-white p-4 rounded-xl border border-emerald-200 shadow-sm space-y-1.5">
+                        <div class="flex items-center justify-between">
+                            <span class="flex items-center gap-1.5 text-xs font-black text-emerald-700 uppercase tracking-wider">
+                                <i class="fa-brands fa-pix text-base text-emerald-600"></i> No Pix
+                            </span>
+                            <span class="text-[10px] font-black text-emerald-700 bg-emerald-100 px-2 py-0.5 rounded-full">
+                                5% de Desconto
+                            </span>
+                        </div>
+                        <div class="flex items-baseline gap-2 pt-0.5">
+                            <span id="detalhe-preco-pix" class="text-3xl font-black text-emerald-700">R$ 0,00</span>
+                            <span class="text-xs font-medium text-emerald-600">à vista</span>
+                        </div>
+                        <p class="text-[11px] text-gray-500 pt-0.5">
+                            Economize <strong id="detalhe-economia-pix" class="text-emerald-700 font-bold">R$ 0,00</strong> no pagamento instantâneo
+                        </p>
+                    </div>
+
+                    <!-- Parcelamento em até 12x -->
+                    <div class="pt-2 border-t border-gray-200/60 flex items-center gap-3 text-xs text-gray-700">
+                        <div class="w-8 h-8 rounded-lg bg-blue-100 text-blue-700 flex items-center justify-center shrink-0">
+                            <i class="fa-solid fa-credit-card text-sm"></i>
+                        </div>
+                        <div>
+                            <span class="font-bold text-gray-900 block" id="detalhe-parcelamento">ou 12x de R$ 0,00 sem juros</span>
+                            <span class="text-[10px] text-gray-500">Parcelamento em até 12x sem juros no cartão</span>
+                        </div>
                     </div>
                 </div>
 
-                <!-- UC002: Consulta de Estoque em Tempo Real na Filial -->
-                <div class="space-y-2 border-t border-b border-gray-100 py-3">
-                    <div class="flex justify-between items-center">
-                        <label class="text-[10px] font-black text-gray-500 uppercase tracking-wider">
-                            <i class="fa-solid fa-shop text-blue-600 mr-1"></i> Filial Selecionada (UC002):
-                        </label>
-                        <button onclick="abrirModalLoja()" class="text-[11px] text-blue-600 hover:underline font-bold">Alterar Filial</button>
+                <!-- Botão de Compra -->
+                <button onclick="irParaCarrinho()" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-black py-4 rounded-xl shadow-lg shadow-blue-600/25 hover:shadow-xl transition-all text-sm uppercase tracking-wider flex items-center justify-center gap-2 transform hover:-translate-y-0.5 cursor-pointer">
+                    <i class="fa-solid fa-cart-shopping text-base"></i> Comprar
+                </button>
+
+                <!-- Benefícios / Informações Adicionais -->
+                <div class="border-t border-gray-100 pt-4 space-y-2.5 text-xs text-gray-600">
+                    <div class="flex items-center gap-2 text-emerald-700 font-medium">
+                        <i class="fa-solid fa-store text-emerald-600"></i>
+                        <span>Retirada grátis na filial com Click & Collect</span>
                     </div>
-                    <div class="bg-blue-50/50 rounded-xl p-3 border border-blue-100 flex items-center justify-between">
-                        <div class="flex items-center space-x-3">
-                            <div class="bg-blue-100 text-blue-700 p-2 rounded-lg text-sm"><i class="fa-solid fa-warehouse"></i></div>
-                            <div>
-                                <p id="txt-status-loja-nome" class="text-xs font-bold text-gray-900">Canoas Centro</p>
-                                <p id="txt-status-loja-info" class="text-[11px] font-medium text-emerald-600">Consultando estoque...</p>
+                    <div class="flex items-center gap-2 text-gray-500">
+                        <i class="fa-solid fa-shield-halved text-blue-600"></i>
+                        <span>Compra 100% protegida e segura</span>
+                    </div>
+                </div>
+
+            </div>
+        </section>
+
+
+        <!-- ============================================================== -->
+        <!-- ABA 2.5: ETAPA DO CARRINHO & CHECKOUT (SELEÇÃO FILIAL E CARTÃO)-->
+        <!-- ============================================================== -->
+        <section id="aba-carrinho" class="hidden transition-all duration-300 space-y-6">
+            
+            <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
+                <button onclick="mudarAba('detalhe')" class="text-xs font-bold text-blue-600 hover:text-blue-800 flex items-center gap-1.5 transition-colors">
+                    <i class="fa-solid fa-chevron-left text-[10px]"></i> Voltar para o produto
+                </button>
+                <div class="flex items-center gap-2 text-xs font-semibold text-gray-400">
+                    <span class="text-gray-500">1. Vitrine</span>
+                    <i class="fa-solid fa-chevron-right text-[9px] text-gray-300"></i>
+                    <span class="text-gray-500">2. Produto</span>
+                    <i class="fa-solid fa-chevron-right text-[9px] text-gray-300"></i>
+                    <span class="text-blue-600 font-bold bg-blue-50 px-2.5 py-1 rounded-lg border border-blue-200">3. Carrinho & Checkout</span>
+                    <i class="fa-solid fa-chevron-right text-[9px] text-gray-300"></i>
+                    <span class="text-gray-400">4. Retirada</span>
+                </div>
+            </div>
+
+            <!-- Conteúdo do Carrinho com Produto -->
+            <div id="carrinho-conteudo" class="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
+                
+                <!-- Coluna Esquerda: Itens + Seleção de Filial + Titular + Pagamento -->
+                <div class="lg:col-span-7 space-y-6">
+                    
+                    <!-- 1. Card do Produto no Carrinho -->
+                    <div class="bg-white border border-gray-200 rounded-2xl p-5 shadow-sm space-y-4">
+                        <div class="flex justify-between items-center border-b border-gray-100 pb-3">
+                            <h2 class="text-xs font-black text-gray-700 uppercase tracking-wider flex items-center gap-2">
+                                <i class="fa-solid fa-cart-shopping text-blue-600"></i> Produto no Carrinho
+                            </h2>
+                            <span class="text-[10px] bg-blue-50 text-blue-700 font-bold px-2 py-0.5 rounded-full">1 unidade</span>
+                        </div>
+
+                        <div class="flex items-center gap-4">
+                            <div class="w-20 h-20 bg-gray-50 rounded-xl p-2 border border-gray-100 flex items-center justify-center shrink-0">
+                                <img id="carrinho-item-img" src="" alt="" class="max-h-full max-w-full object-contain">
+                            </div>
+                            <div class="flex-1 min-w-0">
+                                <span id="carrinho-item-categoria" class="text-[9px] font-black text-blue-600 uppercase tracking-widest bg-blue-50 px-2 py-0.5 rounded">Categoria</span>
+                                <h3 id="carrinho-item-nome" class="font-bold text-sm text-gray-900 mt-1 truncate">Nome Comercial</h3>
+                                <p id="carrinho-item-sku" class="text-[10px] text-gray-400 font-mono mt-0.5">SKU: ---</p>
+                            </div>
+                            <div class="text-right shrink-0">
+                                <span class="text-[10px] text-gray-400 block font-semibold uppercase">Valor</span>
+                                <span id="carrinho-item-preco" class="text-base font-black text-gray-900">R$ 0,00</span>
+                                <span class="text-[10px] text-emerald-600 font-bold block mt-0.5">Frete Grátis</span>
                             </div>
                         </div>
-                        <span id="badge-estoque-status" class="text-[10px] font-bold px-2 py-1 rounded bg-emerald-100 text-emerald-800">Estoque OK</span>
+                    </div>
+
+                    <!-- 2. Seleção da Filial de Retirada (Transferida da página do produto) -->
+                    <div class="bg-white border border-gray-200 rounded-2xl p-5 shadow-sm space-y-4">
+                        <div class="flex justify-between items-center border-b border-gray-100 pb-3">
+                            <h2 class="text-xs font-black text-gray-700 uppercase tracking-wider flex items-center gap-2">
+                                <i class="fa-solid fa-shop text-blue-600"></i> Filial Selecionada para Retirada (UC002)
+                            </h2>
+                            <button onclick="abrirModalLoja()" class="text-xs text-blue-600 hover:text-blue-800 font-bold flex items-center gap-1 transition-colors">
+                                <i class="fa-solid fa-location-dot"></i> Alterar Filial
+                            </button>
+                        </div>
+
+                        <div class="bg-blue-50/60 rounded-xl p-4 border border-blue-100 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                            <div class="flex items-center space-x-3">
+                                <div class="bg-blue-600 text-white p-2.5 rounded-xl text-base shadow-sm">
+                                    <i class="fa-solid fa-warehouse"></i>
+                                </div>
+                                <div>
+                                    <p id="txt-status-loja-nome" class="text-xs font-black text-gray-900">Canoas Centro</p>
+                                    <p id="txt-status-loja-info" class="text-[11px] font-medium text-emerald-600 mt-0.5">Consultando estoque...</p>
+                                </div>
+                            </div>
+                            <div class="flex items-center gap-2 self-start sm:self-center">
+                                <span id="badge-estoque-status" class="text-[10px] font-bold px-2.5 py-1 rounded bg-emerald-100 text-emerald-800">Estoque OK</span>
+                                <span class="text-[10px] font-black uppercase text-emerald-700 bg-emerald-100 px-2 py-1 rounded">Retirada Grátis</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- 3. Dados do Titular e Terceiro Autorizado -->
+                    <div class="bg-white border border-gray-200 rounded-2xl p-5 shadow-sm space-y-4">
+                        <h2 class="text-xs font-black text-gray-700 uppercase tracking-wider flex items-center gap-2 border-b border-gray-100 pb-3">
+                            <i class="fa-solid fa-id-card text-blue-600"></i> Dados do Titular da Compra
+                        </h2>
+                        <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                            <div>
+                                <label class="text-[10px] font-bold text-gray-500 uppercase block mb-1">Nome Completo</label>
+                                <input type="text" id="chk-nome-cliente" value="Murilo Alves" class="w-full px-3 py-2 border border-gray-300 rounded-xl text-xs focus:outline-none focus:border-blue-600 font-medium">
+                            </div>
+                            <div>
+                                <label class="text-[10px] font-bold text-gray-500 uppercase block mb-1">CPF (com foto na retirada)</label>
+                                <input type="text" id="chk-cpf-cliente" value="123.456.789-00" class="w-full px-3 py-2 border border-gray-300 rounded-xl text-xs focus:outline-none focus:border-blue-600 font-medium">
+                            </div>
+                        </div>
+
+                        <!-- Autorização de Terceiro (Fluxo 5.3.5.1) -->
+                        <div class="bg-gray-50 p-3.5 rounded-xl border border-gray-200 space-y-2.5 mt-2">
+                            <label class="flex items-center space-x-2 cursor-pointer select-none">
+                                <input type="checkbox" id="chk-habilitar-terceiro" onchange="toggleCamposTerceiro()" class="w-4 h-4 text-blue-600 rounded">
+                                <span class="text-xs font-bold text-gray-800">
+                                    Outra pessoa irá retirar este pedido na loja? (Fluxo 5.3.5.1)
+                                </span>
+                            </label>
+                            <div id="box-terceiro" class="hidden grid grid-cols-1 sm:grid-cols-2 gap-3 pt-2 border-t border-gray-200">
+                                <div>
+                                    <label class="text-[10px] font-bold text-gray-500 uppercase block mb-1">Nome do Terceiro Autorizado</label>
+                                    <input type="text" id="chk-nome-terceiro" placeholder="Nome de quem vai retirar" value="João Vitor G. Valli" class="w-full px-3 py-2 border border-gray-300 rounded-xl text-xs focus:outline-none focus:border-blue-600 font-medium">
+                                </div>
+                                <div>
+                                    <label class="text-[10px] font-bold text-gray-500 uppercase block mb-1">CPF do Terceiro Autorizado</label>
+                                    <input type="text" id="chk-cpf-terceiro" placeholder="000.000.000-00" value="987.654.321-11" class="w-full px-3 py-2 border border-gray-300 rounded-xl text-xs focus:outline-none focus:border-blue-600 font-medium">
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- 4. Checkout com Cartão (Transferido da página do produto) -->
+                    <div class="bg-white border border-gray-200 rounded-2xl p-5 shadow-sm space-y-4">
+                        <div class="flex justify-between items-center border-b border-gray-100 pb-3">
+                            <h2 class="text-xs font-black text-gray-700 uppercase tracking-wider flex items-center gap-2">
+                                <i class="fa-solid fa-credit-card text-blue-600"></i> Pagamento com Cartão (RF003 / HTTPS)
+                            </h2>
+                            <span class="text-[9px] text-emerald-700 font-bold bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200">Ambiente Seguro SSL</span>
+                        </div>
+
+                        <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                            <div class="sm:col-span-2">
+                                <label class="text-[10px] font-bold text-gray-500 uppercase block mb-1">Número do Cartão</label>
+                                <input type="text" id="chk-cartao-numero" value="4532 8900 1234 5678" class="w-full px-3 py-2 border border-gray-300 rounded-xl text-xs focus:outline-none focus:border-blue-600 font-mono">
+                            </div>
+                            <div>
+                                <label class="text-[10px] font-bold text-gray-500 uppercase block mb-1">CVV</label>
+                                <input type="text" id="chk-cartao-cvv" value="888" maxlength="4" class="w-full px-3 py-2 border border-gray-300 rounded-xl text-xs focus:outline-none focus:border-blue-600 font-mono">
+                            </div>
+                        </div>
+
+                        <!-- Simulação do Fluxo Alternativo 5.1.5.2 -->
+                        <label class="flex items-center space-x-2 cursor-pointer pt-1 text-[11px] text-red-700 select-none">
+                            <input type="checkbox" id="chk-simular-recusa" class="w-3.5 h-3.5 text-red-600 rounded">
+                            <span class="font-bold">Testar Fluxo Alternativo 5.1.5.2: Simular recusa financeira da operadora</span>
+                        </label>
+                    </div>
+
+                </div>
+
+                <!-- Coluna Direita: Resumo Financeiro e Confirmação -->
+                <div class="lg:col-span-5 bg-white border border-gray-200 rounded-2xl p-6 shadow-sm space-y-5 sticky top-24">
+                    <h2 class="text-xs font-black text-gray-900 uppercase tracking-wider border-b border-gray-100 pb-3 flex items-center gap-2">
+                        <i class="fa-solid fa-receipt text-blue-600"></i> Resumo do Pedido
+                    </h2>
+
+                    <div class="space-y-3 text-xs">
+                        <div class="flex justify-between text-gray-600">
+                            <span>Subtotal (1 item)</span>
+                            <span id="carrinho-resumo-subtotal" class="font-bold text-gray-900">R$ 0,00</span>
+                        </div>
+                        <div class="flex justify-between text-gray-600">
+                            <span>Frete Click & Collect</span>
+                            <span class="font-black text-emerald-600">Grátis (R$ 0,00)</span>
+                        </div>
+                        <div class="border-t border-gray-200 pt-3 flex justify-between items-baseline">
+                            <span class="font-bold text-sm text-gray-800">Total a Pagar</span>
+                            <span id="carrinho-resumo-total" class="text-2xl font-black text-slate-950">R$ 0,00</span>
+                        </div>
+                    </div>
+
+                    <!-- Detalhes de Pagamento: Pix ou Parcelamento -->
+                    <div class="bg-gradient-to-br from-emerald-50/70 to-blue-50/40 border border-emerald-200/60 rounded-xl p-3.5 space-y-1.5 text-xs">
+                        <div class="flex justify-between items-center text-emerald-800 font-bold">
+                            <span class="flex items-center gap-1.5"><i class="fa-brands fa-pix text-emerald-600"></i> À vista no Pix (5% OFF):</span>
+                            <span id="carrinho-resumo-pix" class="text-sm font-black text-emerald-700">R$ 0,00</span>
+                        </div>
+                        <p class="text-[11px] text-gray-600 pt-1 border-t border-emerald-100/60" id="carrinho-resumo-parcelas">
+                            ou em até 12x de R$ 0,00 sem juros no cartão
+                        </p>
+                    </div>
+
+                    <!-- Botão Finalizar Compra UC003 -->
+                    <button onclick="executarCheckoutUC003()" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-3.5 rounded-xl shadow-lg shadow-blue-600/20 hover:shadow-xl transition-all text-xs uppercase tracking-wider flex items-center justify-center gap-2 transform hover:-translate-y-0.5 cursor-pointer">
+                        <i class="fa-solid fa-lock mr-1"></i> Confirmar Pedido & Reservar Estoque (UC003)
+                    </button>
+
+                    <div class="text-[10px] text-gray-400 text-center space-y-1 pt-1">
+                        <p><i class="fa-solid fa-shield-halved text-emerald-600 mr-1"></i> Transação criptografada com certificado SSL seguro</p>
+                        <p>Retirada imediata no balcão após separação física</p>
                     </div>
                 </div>
 
-                <!-- Formulário: Dados do Titular -->
-                <div class="space-y-3">
-                    <h3 class="text-xs font-black text-gray-700 uppercase tracking-wider flex items-center gap-1.5">
-                        <i class="fa-solid fa-id-card text-blue-600"></i> Dados do Titular da Compra
-                    </h3>
-                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                        <div>
-                            <label class="text-[10px] font-bold text-gray-500 uppercase block mb-1">Nome Completo</label>
-                            <input type="text" id="chk-nome-cliente" value="Murilo Alves" class="w-full px-3 py-2 border border-gray-300 rounded-xl text-xs focus:outline-none focus:border-blue-600 font-medium">
-                        </div>
-                        <div>
-                            <label class="text-[10px] font-bold text-gray-500 uppercase block mb-1">CPF (com foto na retirada)</label>
-                            <input type="text" id="chk-cpf-cliente" value="123.456.789-00" class="w-full px-3 py-2 border border-gray-300 rounded-xl text-xs focus:outline-none focus:border-blue-600 font-medium">
-                        </div>
-                    </div>
-                </div>
+            </div>
 
-                <!-- Fluxo Alternativo 5.3.5.1: Autorização de Terceiro para Retirada -->
-                <div class="bg-gray-50 p-3.5 rounded-xl border border-gray-200 space-y-2.5">
-                    <label class="flex items-center space-x-2 cursor-pointer select-none">
-                        <input type="checkbox" id="chk-habilitar-terceiro" onchange="toggleCamposTerceiro()" class="w-4 h-4 text-blue-600 rounded">
-                        <span class="text-xs font-bold text-gray-800">
-                            Outra pessoa irá retirar este pedido na loja? (Fluxo 5.3.5.1)
-                        </span>
-                    </label>
-                    <div id="box-terceiro" class="hidden grid grid-cols-1 sm:grid-cols-2 gap-3 pt-2 border-t border-gray-200">
-                        <div>
-                            <label class="text-[10px] font-bold text-gray-500 uppercase block mb-1">Nome do Terceiro Autorizado</label>
-                            <input type="text" id="chk-nome-terceiro" placeholder="Nome de quem vai retirar" value="João Vitor G. Valli" class="w-full px-3 py-2 border border-gray-300 rounded-xl text-xs focus:outline-none focus:border-blue-600 font-medium">
-                        </div>
-                        <div>
-                            <label class="text-[10px] font-bold text-gray-500 uppercase block mb-1">CPF do Terceiro Autorizado</label>
-                            <input type="text" id="chk-cpf-terceiro" placeholder="000.000.000-00" value="987.654.321-11" class="w-full px-3 py-2 border border-gray-300 rounded-xl text-xs focus:outline-none focus:border-blue-600 font-medium">
-                        </div>
-                    </div>
-                </div>
-
-                <!-- RF003 / Ator 4: Operadora de Cartão (com simulação de recusa 5.1.5.2) -->
-                <div class="space-y-3 bg-blue-50/30 p-3.5 rounded-xl border border-blue-100">
-                    <div class="flex justify-between items-center">
-                        <h3 class="text-xs font-black text-gray-700 uppercase tracking-wider flex items-center gap-1.5">
-                            <i class="fa-solid fa-credit-card text-blue-600"></i> Pagamento com Cartão (RF003 / HTTPS)
-                        </h3>
-                        <span class="text-[9px] text-emerald-700 font-bold bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200">Ambiente Seguro SSL</span>
-                    </div>
-                    <div class="grid grid-cols-1 sm:grid-cols-3 gap-2">
-                        <div class="sm:col-span-2">
-                            <label class="text-[10px] font-bold text-gray-500 uppercase block mb-1">Número do Cartão</label>
-                            <input type="text" id="chk-cartao-numero" value="4532 8900 1234 5678" class="w-full px-3 py-2 border border-gray-300 rounded-xl text-xs focus:outline-none focus:border-blue-600 font-mono">
-                        </div>
-                        <div>
-                            <label class="text-[10px] font-bold text-gray-500 uppercase block mb-1">CVV</label>
-                            <input type="text" id="chk-cartao-cvv" value="888" maxlength="4" class="w-full px-3 py-2 border border-gray-300 rounded-xl text-xs focus:outline-none focus:border-blue-600 font-mono">
-                        </div>
-                    </div>
-
-                    <!-- Simulação do Fluxo Alternativo 5.1.5.2 para fins de demonstração acadêmica -->
-                    <label class="flex items-center space-x-2 cursor-pointer pt-1 text-[11px] text-red-700 select-none">
-                        <input type="checkbox" id="chk-simular-recusa" class="w-3.5 h-3.5 text-red-600 rounded">
-                        <span class="font-bold">Testar Fluxo Alternativo 5.1.5.2: Simular recusa financeira da operadora</span>
-                    </label>
-                </div>
-
-                <!-- Botão de Finalização do UC003 -->
-                <button onclick="executarCheckoutUC003()" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-3.5 rounded-xl shadow-lg shadow-blue-600/20 hover:shadow-xl transition-all text-xs uppercase tracking-wider flex items-center justify-center gap-2 transform hover:-translate-y-0.5">
-                    <i class="fa-solid fa-lock mr-1"></i> Confirmar Pedido & Reservar Estoque (UC003)
+            <!-- Carrinho Vazio -->
+            <div id="carrinho-vazio" class="hidden text-center py-16 bg-white rounded-2xl border border-gray-200 text-gray-400 font-medium text-xs">
+                <i class="fa-solid fa-cart-shopping text-4xl block mb-3 text-gray-300"></i>
+                <p class="text-sm font-bold text-gray-700">Seu carrinho está vazio</p>
+                <p class="text-xs text-gray-500 mt-1">Nenhum produto foi selecionado ainda. Escolha um produto na vitrine para comprar.</p>
+                <button onclick="mudarAba('vitrine')" class="mt-4 bg-blue-600 hover:bg-blue-700 text-white font-bold px-4 py-2 rounded-xl text-xs transition-colors inline-flex items-center gap-1.5 shadow-sm">
+                    <i class="fa-solid fa-arrow-left text-[10px]"></i> Ver Vitrine de Produtos
                 </button>
             </div>
+
         </section>
 
 
@@ -423,12 +666,81 @@
                         <button onclick="mudarAba('vitrine')" class="text-xs text-gray-600 hover:text-blue-600 font-bold transition-colors">
                             <i class="fa-solid fa-chevron-left text-[10px] mr-1"></i> Voltar à Loja
                         </button>
-                        <button onclick="alternarAtor('balcao')" class="text-xs text-amber-600 hover:text-amber-800 font-bold transition-colors flex items-center gap-1">
-                            Ir ao Painel do Balcão <i class="fa-solid fa-arrow-right text-[10px]"></i>
+                        <button onclick="navegarPara('/operador')" class="text-xs text-amber-600 hover:text-amber-800 font-bold transition-colors flex items-center gap-1" title="Apenas colaboradores autorizados">
+                            <i class="fa-solid fa-dolly text-xs"></i> Ir para Retaguarda / Balcão <i class="fa-solid fa-arrow-right text-[10px]"></i>
                         </button>
                     </div>
 
                 </div>
+            </div>
+        </section>
+
+
+        <!-- ============================================================== -->
+        <!-- ABA LOGIN OPERADOR / ADMIN (CONTROLE DE ACESSO REST RITO)       -->
+        <!-- ============================================================== -->
+        <section id="aba-login-operador" class="hidden max-w-md mx-auto my-6 transition-all duration-300">
+            <div class="bg-white rounded-2xl shadow-2xl border border-slate-200 overflow-hidden">
+                <div class="bg-slate-900 text-white p-6 text-center border-b border-slate-800">
+                    <div class="w-14 h-14 bg-amber-500/20 text-amber-400 rounded-2xl flex items-center justify-center mx-auto text-2xl mb-3 border border-amber-500/30 shadow-inner">
+                        <i class="fa-solid fa-shield-halved"></i>
+                    </div>
+                    <h2 class="text-base font-black uppercase tracking-wider text-white">Acesso Restrito • Balcão & Operador</h2>
+                    <p class="text-xs text-slate-400 mt-1">
+                        Painel de Retaguarda e Validação Presencial (Click & Collect)
+                    </p>
+                    <div class="mt-3 inline-flex items-center gap-1.5 bg-slate-800 text-amber-300 text-[10px] px-3 py-1 rounded-full font-mono border border-slate-700">
+                        <i class="fa-solid fa-lock"></i> Rota Administrativa: <strong class="text-white">/operador</strong>
+                    </div>
+                </div>
+
+                <form onsubmit="realizarLoginOperador(event)" class="p-6 space-y-4 text-xs">
+                    <div>
+                        <label class="font-bold text-gray-700 uppercase text-[10px] block mb-1">Usuário / Matrícula</label>
+                        <div class="relative">
+                            <span class="absolute left-3 top-2.5 text-gray-400"><i class="fa-solid fa-id-badge"></i></span>
+                            <input type="text" id="op-login-user" value="operador" placeholder="Digite seu usuário ou matrícula..." required class="w-full pl-9 pr-3 py-2 border border-gray-300 rounded-xl text-xs focus:outline-none focus:border-amber-500 font-medium">
+                        </div>
+                    </div>
+
+                    <div>
+                        <label class="font-bold text-gray-700 uppercase text-[10px] block mb-1">Senha de Acesso</label>
+                        <div class="relative">
+                            <span class="absolute left-3 top-2.5 text-gray-400"><i class="fa-solid fa-key"></i></span>
+                            <input type="password" id="op-login-pass" value="123456" placeholder="••••••••" required class="w-full pl-9 pr-3 py-2 border border-gray-300 rounded-xl text-xs focus:outline-none focus:border-amber-500 font-medium">
+                        </div>
+                    </div>
+
+                    <div>
+                        <label class="font-bold text-gray-700 uppercase text-[10px] block mb-1">Filial de Trabalho</label>
+                        <select id="op-login-filial" class="w-full border border-gray-300 rounded-xl p-2.5 text-xs bg-gray-50 focus:outline-none focus:border-amber-500 font-medium">
+                            <option value="1">MegaLoja - Filial Canoas Centro</option>
+                            <option value="2">MegaLoja - Filial São Leopoldo Centro</option>
+                        </select>
+                    </div>
+
+                    <div class="pt-2">
+                        <button type="submit" class="w-full bg-slate-900 hover:bg-slate-800 text-amber-400 hover:text-amber-300 font-extrabold py-3 rounded-xl shadow-lg transition-all text-xs uppercase tracking-wider flex items-center justify-center gap-2 border border-slate-700">
+                            <i class="fa-solid fa-right-to-bracket"></i> Acessar Painel do Operador
+                        </button>
+                    </div>
+
+                    <div class="bg-amber-50 border border-amber-200 rounded-xl p-3 text-[11px] text-amber-900 space-y-1">
+                        <p class="font-bold flex items-center gap-1">
+                            <i class="fa-solid fa-circle-info"></i> Autenticação Administrativa:
+                        </p>
+                        <p class="text-amber-800 leading-tight">
+                            Módulo de controle de acesso preparado para futura integração com banco de dados / LDAP / Supabase Auth.
+                            <span class="font-mono font-bold block mt-1">Padrão de teste: operador / 123456</span>
+                        </p>
+                    </div>
+
+                    <div class="text-center pt-2">
+                        <a href="javascript:void(0)" onclick="navegarPara('/cliente')" class="text-blue-600 hover:underline font-bold text-[11px] inline-flex items-center gap-1">
+                            <i class="fa-solid fa-arrow-left"></i> Voltar para a Loja do Cliente
+                        </a>
+                    </div>
+                </form>
             </div>
         </section>
 
@@ -653,6 +965,124 @@
         </div>
     </div>
 
+    <!-- MODAL DE AUTENTICAÇÃO DO CLIENTE (LOGIN & SENHA / CADASTRO) -->
+    <div id="modal-auth-cliente" class="fixed inset-0 bg-slate-950/60 z-50 flex items-center justify-center p-4 hidden opacity-0 transition-all duration-300">
+        <div class="bg-white rounded-2xl max-w-md w-full overflow-hidden shadow-2xl transform scale-95 transition-all duration-300" id="modal-auth-content">
+            <!-- Header do Modal -->
+            <div class="bg-gradient-to-r from-blue-700 to-indigo-700 text-white px-6 py-4 flex justify-between items-center">
+                <div class="flex items-center gap-2.5">
+                    <div class="w-9 h-9 rounded-xl bg-white/10 flex items-center justify-center text-amber-300 text-lg shadow-inner">
+                        <i class="fa-solid fa-circle-user"></i>
+                    </div>
+                    <div>
+                        <h3 class="font-extrabold text-sm uppercase tracking-wide">Área do Cliente</h3>
+                        <p class="text-[10px] text-blue-100">MegaLoja Click & Collect</p>
+                    </div>
+                </div>
+                <button onclick="fecharModalAuthCliente()" class="text-blue-200 hover:text-white transition-colors">
+                    <i class="fa-solid fa-xmark text-lg"></i>
+                </button>
+            </div>
+
+            <!-- Seletor de Abas: Entrar vs Cadastrar -->
+            <div class="flex border-b border-gray-200 text-xs font-bold bg-gray-50/70">
+                <button id="tab-auth-login" onclick="alternarTabAuthCliente('login')" class="flex-1 py-3 text-center border-b-2 border-blue-600 text-blue-600 bg-white transition-all flex items-center justify-center gap-1.5">
+                    <i class="fa-solid fa-right-to-bracket"></i> Entrar (Login)
+                </button>
+                <button id="tab-auth-cadastro" onclick="alternarTabAuthCliente('cadastro')" class="flex-1 py-3 text-center border-b-2 border-transparent text-gray-500 hover:text-gray-800 transition-all flex items-center justify-center gap-1.5">
+                    <i class="fa-solid fa-user-plus"></i> Criar Cadastro
+                </button>
+            </div>
+
+            <!-- Conteúdo: Formulário de Login -->
+            <form id="form-auth-login" onsubmit="executarLoginCliente(event)" class="p-6 space-y-4">
+                <div>
+                    <label class="text-[10px] font-black text-gray-500 uppercase block mb-1">E-mail ou CPF</label>
+                    <div class="relative">
+                        <span class="absolute left-3 top-2.5 text-gray-400 text-xs"><i class="fa-solid fa-envelope"></i></span>
+                        <input type="text" id="cli-login-usuario" placeholder="seu@email.com ou 123.456.789-00" value="murilo@unilasalle.edu.br" required class="w-full pl-9 pr-3 py-2 border border-gray-300 rounded-xl text-xs focus:outline-none focus:border-blue-600 font-medium">
+                    </div>
+                </div>
+                <div>
+                    <div class="flex justify-between items-center mb-1">
+                        <label class="text-[10px] font-black text-gray-500 uppercase">Senha de Acesso</label>
+                        <a href="javascript:void(0)" onclick="triggerToast('Recuperação de Senha', 'Link enviado para o seu e-mail cadastrado.', 'success')" class="text-[10px] text-blue-600 hover:underline font-semibold">Esqueceu a senha?</a>
+                    </div>
+                    <div class="relative">
+                        <span class="absolute left-3 top-2.5 text-gray-400 text-xs"><i class="fa-solid fa-lock"></i></span>
+                        <input type="password" id="cli-login-senha" value="123456" placeholder="••••••••" required class="w-full pl-9 pr-3 py-2 border border-gray-300 rounded-xl text-xs focus:outline-none focus:border-blue-600 font-medium">
+                    </div>
+                </div>
+
+                <div class="flex items-center justify-between text-xs pt-1">
+                    <label class="flex items-center gap-2 cursor-pointer text-gray-600 select-none">
+                        <input type="checkbox" id="chk-lembrar-cliente" checked class="w-3.5 h-3.5 text-blue-600 rounded">
+                        <span class="text-[11px]">Lembrar de mim</span>
+                    </label>
+                    <span class="text-[10px] text-emerald-600 font-bold bg-emerald-50 px-2 py-0.5 rounded border border-emerald-100">Login Seguro</span>
+                </div>
+
+                <button type="submit" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-2.5 rounded-xl shadow-md text-xs uppercase tracking-wider transition-all flex items-center justify-center gap-2">
+                    <i class="fa-solid fa-right-to-bracket"></i> Acessar Minha Conta
+                </button>
+
+                <div class="pt-2 text-center border-t border-gray-100">
+                    <p class="text-[11px] text-gray-500">
+                        Não possui uma conta? 
+                        <button type="button" onclick="alternarTabAuthCliente('cadastro')" class="text-blue-600 font-bold hover:underline">Cadastre-se grátis</button>
+                    </p>
+                </div>
+            </form>
+
+            <!-- Conteúdo: Formulário de Cadastro -->
+            <form id="form-auth-cadastro" onsubmit="executarCadastroCliente(event)" class="p-6 space-y-3 hidden">
+                <div>
+                    <label class="text-[10px] font-black text-gray-500 uppercase block mb-1">Nome Completo</label>
+                    <input type="text" id="cli-cad-nome" placeholder="Ex: Murilo Alves" required class="w-full px-3 py-2 border border-gray-300 rounded-xl text-xs focus:outline-none focus:border-blue-600 font-medium">
+                </div>
+                <div class="grid grid-cols-2 gap-2">
+                    <div>
+                        <label class="text-[10px] font-black text-gray-500 uppercase block mb-1">CPF</label>
+                        <input type="text" id="cli-cad-cpf" placeholder="000.000.000-00" required class="w-full px-3 py-2 border border-gray-300 rounded-xl text-xs focus:outline-none focus:border-blue-600 font-medium">
+                    </div>
+                    <div>
+                        <label class="text-[10px] font-black text-gray-500 uppercase block mb-1">WhatsApp / Telefone</label>
+                        <input type="text" id="cli-cad-telefone" placeholder="(51) 99999-9999" required class="w-full px-3 py-2 border border-gray-300 rounded-xl text-xs focus:outline-none focus:border-blue-600 font-medium">
+                    </div>
+                </div>
+                <div>
+                    <label class="text-[10px] font-black text-gray-500 uppercase block mb-1">E-mail</label>
+                    <input type="email" id="cli-cad-email" placeholder="seu@email.com" required class="w-full px-3 py-2 border border-gray-300 rounded-xl text-xs focus:outline-none focus:border-blue-600 font-medium">
+                </div>
+                <div class="grid grid-cols-2 gap-2">
+                    <div>
+                        <label class="text-[10px] font-black text-gray-500 uppercase block mb-1">Senha</label>
+                        <input type="password" id="cli-cad-senha" placeholder="Mínimo 6 caracteres" required class="w-full px-3 py-2 border border-gray-300 rounded-xl text-xs focus:outline-none focus:border-blue-600 font-medium">
+                    </div>
+                    <div>
+                        <label class="text-[10px] font-black text-gray-500 uppercase block mb-1">Confirmar Senha</label>
+                        <input type="password" id="cli-cad-senha-conf" placeholder="Repita a senha" required class="w-full px-3 py-2 border border-gray-300 rounded-xl text-xs focus:outline-none focus:border-blue-600 font-medium">
+                    </div>
+                </div>
+
+                <button type="submit" class="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-2.5 rounded-xl shadow-md text-xs uppercase tracking-wider transition-all flex items-center justify-center gap-2 mt-2">
+                    <i class="fa-solid fa-user-check"></i> Finalizar Cadastro
+                </button>
+
+                <div class="pt-2 text-center border-t border-gray-100">
+                    <p class="text-[11px] text-gray-500">
+                        Já possui cadastro? 
+                        <button type="button" onclick="alternarTabAuthCliente('login')" class="text-blue-600 font-bold hover:underline">Fazer login</button>
+                    </p>
+                </div>
+            </form>
+
+            <div class="bg-gray-50 px-6 py-2.5 border-t border-gray-100 text-center">
+                <span class="text-[10px] text-gray-400">Ambiente Seguro com Proteção de Dados (LGPD)</span>
+            </div>
+        </div>
+    </div>
+
     <!-- NOTIFICAÇÃO TOAST FLUTUANTE -->
     <div id="toast" class="fixed bottom-5 right-5 bg-gray-900 text-white px-4 py-3 rounded-xl shadow-2xl flex items-center space-x-3 translate-y-24 opacity-0 transition-all duration-300 z-50 max-w-sm pointer-events-none">
         <div class="p-1 rounded bg-blue-600 text-white text-xs flex items-center justify-center w-6 h-6" id="toast-icon-bg">
@@ -666,8 +1096,20 @@
 
     <!-- RODAPÉ TÉCNICO -->
     <footer class="bg-white border-t border-gray-200 text-center py-6 text-xs text-gray-500 mt-12 shadow-inner">
-        <div class="container mx-auto px-4 space-y-1">
+        <div class="container mx-auto px-4 space-y-2">
             <p class="font-bold text-gray-800">MegaLoja Central de Click & Collect • Trabalho G2</p>
+            
+            <!-- Links diretos para as rotas -->
+            <div class="flex items-center justify-center gap-4 text-xs font-semibold py-1">
+                <a href="javascript:void(0)" onclick="navegarPara('/cliente')" class="text-blue-600 hover:underline flex items-center gap-1">
+                    <i class="fa-solid fa-cart-shopping"></i> Rota do Cliente (/cliente)
+                </a>
+                <span class="text-gray-300">•</span>
+                <a href="javascript:void(0)" onclick="navegarPara('/operador')" class="text-amber-600 hover:underline flex items-center gap-1">
+                    <i class="fa-solid fa-dolly"></i> Rota de Operador & Balcão (/operador)
+                </a>
+            </div>
+
             <p class="text-[11px] text-gray-500">
                 Metodologia Scrum: Murilo Alves (SM), João Vitor G. Valli (PO), Leonardo Quadros & Guilherme Reis (Dev), Júlia Normando (Testes).
             </p>

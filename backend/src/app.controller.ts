@@ -42,6 +42,26 @@ export class AppController {
     this.serveFrontHtml(res);
   }
 
+  @Get("cliente")
+  getCliente(@Res() res: Response): void {
+    this.serveFrontHtml(res);
+  }
+
+  @Get("operador")
+  getOperador(@Res() res: Response): void {
+    this.serveFrontHtml(res);
+  }
+
+  @Get("balcao")
+  getBalcao(@Res() res: Response): void {
+    this.serveFrontHtml(res);
+  }
+
+  @Get("admin")
+  getAdmin(@Res() res: Response): void {
+    this.serveFrontHtml(res);
+  }
+
   @Get("api")
   getApiIndex() {
     return this.appService.getApiIndex();

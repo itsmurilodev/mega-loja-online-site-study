@@ -18,14 +18,50 @@
         let pedidoSeparacaoSelecionado = null;
         let pedidoRetiradaLocalizado = null;
 
+        // Estado de Rotas e Autenticação (Cliente vs Operador/Admin)
+        let rotaAtual = 'cliente'; // 'cliente' ou 'operador'
+
+        // Cliente Autenticado (salvo em localStorage)
+        let clienteLogado = (() => {
+            try {
+                return JSON.parse(localStorage.getItem('megaloja_cliente') || 'null');
+            } catch (e) {
+                return null;
+            }
+        })() || {
+            nome: 'Murilo Alves',
+            cpf: '123.456.789-00',
+            email: 'murilo@unilasalle.edu.br',
+            telefone: '(51) 99887-6655'
+        };
+
+        // Operador/Admin Autenticado (salvo em sessionStorage para simulação de sessão)
+        let operadorLogado = (() => {
+            try {
+                return JSON.parse(sessionStorage.getItem('megaloja_operador') || 'null');
+            } catch (e) {
+                return null;
+            }
+        })();
+
         // Inicialização
         window.onload = async () => {
+            atualizarInterfaceCliente();
             await carregarDadosBackend();
             executarFiltrosCombinados();
             renderizarLojasModal();
             atualizarLayoutFocoLoja();
+
+            // Resolve a rota a partir da URL (/operador ou /cliente)
+            const rotaInicial = obterRotaDaUrl();
+            navegarPara(rotaInicial, false);
+
             await recarregarPedidosBalcao();
         };
+
+        window.addEventListener('popstate', () => {
+            navegarPara(obterRotaDaUrl(), false);
+        });
 
         async function apiFetch(path, options = {}) {
             const resp = await fetch(`${API_BASE_URL}${path}`, {
@@ -112,7 +148,8 @@
             lista.forEach(p => {
                 const qtdEstoque = p.estoques[lojaAtiva.id] || 0;
                 const card = document.createElement('div');
-                card.className = "bg-white border border-gray-200 rounded-2xl p-4 flex flex-col justify-between hover:shadow-xl transition-all duration-300 group";
+                card.className = "bg-white border border-gray-200 rounded-2xl p-4 flex flex-col justify-between hover:shadow-xl transition-all duration-300 group cursor-pointer hover:border-blue-400";
+                card.onclick = () => carregarDetalhesProduto(p.id);
                 
                 card.innerHTML = `
                     <div>
@@ -131,8 +168,8 @@
                                 <i class="fa-solid ${qtdEstoque > 0 ? 'fa-circle-check' : 'fa-clock'} mr-0.5"></i> ${qtdEstoque > 0 ? `${qtdEstoque} un. na filial` : 'Sem estoque local'}
                             </span>
                         </div>
-                        <button onclick="carregarDetalhesProduto(${p.id})" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 rounded-xl text-xs transition-colors flex items-center justify-center gap-1">
-                            Retirar na Loja <i class="fa-solid fa-chevron-right text-[9px]"></i>
+                        <button onclick="event.stopPropagation(); carregarDetalhesProduto(${p.id})" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 rounded-xl text-xs transition-colors flex items-center justify-center gap-1.5 shadow-sm">
+                            <i class="fa-solid fa-cart-shopping text-[11px]"></i> Comprar
                         </button>
                     </div>
                 `;
@@ -211,16 +248,103 @@
             produtoSelecionado = dbProdutos.find(p => p.id === id);
             if (!produtoSelecionado) return;
 
-            document.getElementById('detalhe-categoria').innerText = produtoSelecionado.categoria;
-            document.getElementById('detalhe-nome').innerText = produtoSelecionado.nome;
-            document.getElementById('detalhe-preco').innerText = `R$ ${produtoSelecionado.preco.toLocaleString('pt-BR', {minimumFractionDigits: 2})}`;
-            document.getElementById('detalhe-codigos').innerText = `SKU: ${produtoSelecionado.sku} | Cód. Barras: ${produtoSelecionado.barcode}`;
-            document.getElementById('detalhe-imagem').src = produtoSelecionado.img;
-            document.getElementById('detalhe-imagem').alt = produtoSelecionado.nome;
+            const elCat = document.getElementById('detalhe-categoria');
+            if (elCat) elCat.innerText = produtoSelecionado.categoria;
+            const elNome = document.getElementById('detalhe-nome');
+            if (elNome) elNome.innerText = produtoSelecionado.nome;
+
+            const preco = produtoSelecionado.preco;
+            const precoPix = preco * 0.95;
+            const economiaPix = preco * 0.05;
+            const valorParcela = preco / 12;
+
+            const elPreco = document.getElementById('detalhe-preco');
+            if (elPreco) elPreco.innerText = `R$ ${preco.toLocaleString('pt-BR', {minimumFractionDigits: 2, maximumFractionDigits: 2})}`;
+
+            const elPix = document.getElementById('detalhe-preco-pix');
+            if (elPix) elPix.innerText = `R$ ${precoPix.toLocaleString('pt-BR', {minimumFractionDigits: 2, maximumFractionDigits: 2})}`;
+
+            const elEconomia = document.getElementById('detalhe-economia-pix');
+            if (elEconomia) elEconomia.innerText = `R$ ${economiaPix.toLocaleString('pt-BR', {minimumFractionDigits: 2, maximumFractionDigits: 2})}`;
+
+            const elParc = document.getElementById('detalhe-parcelamento');
+            if (elParc) elParc.innerText = `ou 12x de R$ ${valorParcela.toLocaleString('pt-BR', {minimumFractionDigits: 2, maximumFractionDigits: 2})} sem juros`;
+
+            const elCodigos = document.getElementById('detalhe-codigos');
+            if (elCodigos) elCodigos.innerText = `SKU: ${produtoSelecionado.sku} | Cód. Barras: ${produtoSelecionado.barcode}`;
+            
+            const elImg = document.getElementById('detalhe-imagem');
+            if (elImg) {
+                elImg.src = produtoSelecionado.img;
+                elImg.alt = produtoSelecionado.nome;
+            }
             renderizarFichaProduto(produtoSelecionado);
 
             atualizarLayoutFocoLoja();
             mudarAba('detalhe');
+        }
+
+        // Funções do Carrinho de Compras
+        function irParaCarrinho() {
+            if (!produtoSelecionado) {
+                triggerToast("Seleção Obrigatória", "Selecione um produto para continuar.", "warning");
+                return;
+            }
+            atualizarDadosCarrinho();
+            mudarAba('carrinho');
+        }
+
+        function abrirCarrinho() {
+            if (produtoSelecionado) {
+                atualizarDadosCarrinho();
+            } else {
+                const elConteudo = document.getElementById('carrinho-conteudo');
+                const elVazio = document.getElementById('carrinho-vazio');
+                if (elConteudo) elConteudo.classList.add('hidden');
+                if (elVazio) elVazio.classList.remove('hidden');
+            }
+            mudarAba('carrinho');
+        }
+
+        function atualizarDadosCarrinho() {
+            if (!produtoSelecionado) return;
+
+            const elConteudo = document.getElementById('carrinho-conteudo');
+            const elVazio = document.getElementById('carrinho-vazio');
+            if (elConteudo) elConteudo.classList.remove('hidden');
+            if (elVazio) elVazio.classList.add('hidden');
+
+            const preco = produtoSelecionado.preco;
+            const precoPix = preco * 0.95;
+            const valorParcela = preco / 12;
+
+            const itemImg = document.getElementById('carrinho-item-img');
+            if (itemImg) {
+                itemImg.src = produtoSelecionado.img;
+                itemImg.alt = produtoSelecionado.nome;
+            }
+            const itemCat = document.getElementById('carrinho-item-categoria');
+            if (itemCat) itemCat.innerText = produtoSelecionado.categoria;
+            const itemNome = document.getElementById('carrinho-item-nome');
+            if (itemNome) itemNome.innerText = produtoSelecionado.nome;
+            const itemSku = document.getElementById('carrinho-item-sku');
+            if (itemSku) itemSku.innerText = `SKU: ${produtoSelecionado.sku}`;
+            const itemPreco = document.getElementById('carrinho-item-preco');
+            if (itemPreco) itemPreco.innerText = `R$ ${preco.toLocaleString('pt-BR', {minimumFractionDigits: 2, maximumFractionDigits: 2})}`;
+
+            const subtotal = document.getElementById('carrinho-resumo-subtotal');
+            if (subtotal) subtotal.innerText = `R$ ${preco.toLocaleString('pt-BR', {minimumFractionDigits: 2, maximumFractionDigits: 2})}`;
+            const total = document.getElementById('carrinho-resumo-total');
+            if (total) total.innerText = `R$ ${preco.toLocaleString('pt-BR', {minimumFractionDigits: 2, maximumFractionDigits: 2})}`;
+            const resumoPix = document.getElementById('carrinho-resumo-pix');
+            if (resumoPix) resumoPix.innerText = `R$ ${precoPix.toLocaleString('pt-BR', {minimumFractionDigits: 2, maximumFractionDigits: 2})}`;
+            const resumoParc = document.getElementById('carrinho-resumo-parcelas');
+            if (resumoParc) resumoParc.innerText = `ou em até 12x de R$ ${valorParcela.toLocaleString('pt-BR', {minimumFractionDigits: 2, maximumFractionDigits: 2})} sem juros no cartão`;
+
+            const badge = document.getElementById('nav-carrinho-badge');
+            if (badge) badge.innerText = '1';
+
+            atualizarLayoutFocoLoja();
         }
 
         // Filtros e Busca
@@ -244,8 +368,10 @@
         }
 
         function filtrarPorNome() {
-            // Quem digita na busca estando na pagina do produto volta para a vitrine.
-            if (!document.getElementById('aba-detalhe').classList.contains('hidden')) {
+            // Quem digita na busca estando na pagina do produto ou carrinho volta para a vitrine.
+            const abaDetalhe = document.getElementById('aba-detalhe');
+            const abaCarrinho = document.getElementById('aba-carrinho');
+            if ((abaDetalhe && !abaDetalhe.classList.contains('hidden')) || (abaCarrinho && !abaCarrinho.classList.contains('hidden'))) {
                 mudarAba('vitrine');
             }
             executarFiltrosCombinados();
@@ -310,31 +436,345 @@
             renderizarVitrine(resultado);
         }
 
-        // Alternância de Atores (Cliente vs Operador de Balcão)
-        function alternarAtor(ator) {
-            const btnC = document.getElementById('btn-visao-cliente');
-            const btnB = document.getElementById('btn-visao-balcao');
+        // =====================================================================
+        // ROTEAMENTO DINÂMICO (ROTA DO CLIENTE VS ROTA DO OPERADOR/ADMIN)
+        // =====================================================================
+        function obterRotaDaUrl() {
+            const path = window.location.pathname.toLowerCase();
+            const hash = window.location.hash.toLowerCase();
+            const search = new URLSearchParams(window.location.search);
+            const paramRota = search.get('rota')?.toLowerCase();
 
-            if (ator === 'cliente') {
-                btnC.className = "bg-white text-gray-900 font-bold px-3 py-1.5 rounded-lg shadow-sm transition-all flex items-center gap-1.5";
-                btnB.className = "text-gray-500 hover:text-gray-900 font-semibold px-3 py-1.5 rounded-lg transition-all flex items-center gap-1.5";
-                document.getElementById('wrapper-banner').classList.remove('hidden');
-                mudarAba(pedidoAtivo ? 'sucesso' : 'vitrine');
+            if (path.includes('/operador') || path.includes('/balcao') || path.includes('/admin') ||
+                hash.includes('operador') || hash.includes('balcao') || hash.includes('admin') ||
+                paramRota === 'operador' || paramRota === 'balcao' || paramRota === 'admin') {
+                return 'operador';
+            }
+            return 'cliente';
+        }
+
+        function navegarPara(rota, atualizarHistorico = true) {
+            const destino = (rota === '/operador' || rota === 'operador' || rota === '/balcao' || rota === '/admin')
+                ? 'operador'
+                : 'cliente';
+
+            rotaAtual = destino;
+
+            const pillCliente = document.getElementById('pill-rota-cliente');
+            const pillOperador = document.getElementById('pill-rota-operador');
+            const headerCliente = document.getElementById('header-cliente');
+            const headerOperador = document.getElementById('header-operador');
+            const banner = document.getElementById('wrapper-banner');
+
+            if (destino === 'operador') {
+                // Atualiza abas institucionais da barra superior
+                if (pillOperador && pillCliente) {
+                    pillOperador.className = "px-2.5 py-1 rounded-lg font-bold transition-all flex items-center gap-1.5 bg-amber-400 text-slate-950 shadow-sm";
+                    pillCliente.className = "px-2.5 py-1 rounded-lg font-bold transition-all flex items-center gap-1.5 text-blue-200 hover:text-white";
+                }
+
+                // Exibe cabeçalho exclusivo do operador
+                headerCliente?.classList.add('hidden');
+                headerOperador?.classList.remove('hidden');
+                banner?.classList.add('hidden');
+
+                // Oculta abas do cliente
+                ['vitrine', 'detalhe', 'carrinho', 'sucesso'].forEach(aba => {
+                    document.getElementById(`aba-${aba}`)?.classList.add('hidden');
+                });
+
+                // Verifica se operador está autenticado
+                if (operadorLogado) {
+                    document.getElementById('aba-login-operador')?.classList.add('hidden');
+                    document.getElementById('aba-balcao')?.classList.remove('hidden');
+                    atualizarInterfaceOperador();
+                    recarregarPedidosBalcao();
+                } else {
+                    document.getElementById('aba-balcao')?.classList.add('hidden');
+                    document.getElementById('aba-login-operador')?.classList.remove('hidden');
+                }
+
+                if (atualizarHistorico) {
+                    try {
+                        if (!isFileProtocol) {
+                            window.history.pushState({ rota: 'operador' }, '', '/operador');
+                        } else {
+                            window.location.hash = '/operador';
+                        }
+                    } catch (e) {
+                        // Modo estático seguro
+                    }
+                }
             } else {
-                btnB.className = "bg-white text-gray-900 font-bold px-3 py-1.5 rounded-lg shadow-sm transition-all flex items-center gap-1.5";
-                btnC.className = "text-gray-500 hover:text-gray-900 font-semibold px-3 py-1.5 rounded-lg transition-all flex items-center gap-1.5";
-                document.getElementById('wrapper-banner').classList.add('hidden');
-                mudarAba('balcao');
-                recarregarPedidosBalcao();
+                // Destino: Rota do Cliente
+                if (pillCliente && pillOperador) {
+                    pillCliente.className = "px-2.5 py-1 rounded-lg font-bold transition-all flex items-center gap-1.5 bg-white text-blue-950 shadow-sm";
+                    pillOperador.className = "px-2.5 py-1 rounded-lg font-bold transition-all flex items-center gap-1.5 text-blue-200 hover:text-white";
+                }
+
+                // Exibe cabeçalho do cliente e oculta o do operador
+                headerOperador?.classList.add('hidden');
+                headerCliente?.classList.remove('hidden');
+                banner?.classList.remove('hidden');
+
+                // Oculta abas do operador
+                document.getElementById('aba-login-operador')?.classList.add('hidden');
+                document.getElementById('aba-balcao')?.classList.add('hidden');
+
+                // Exibe a aba ativa do cliente
+                mudarAba(pedidoAtivo ? 'sucesso' : 'vitrine');
+
+                if (atualizarHistorico) {
+                    try {
+                        if (!isFileProtocol) {
+                            window.history.pushState({ rota: 'cliente' }, '', '/cliente');
+                        } else {
+                            window.location.hash = '/cliente';
+                        }
+                    } catch (e) {
+                        // Modo estático seguro
+                    }
+                }
+            }
+
+            window.scrollTo({ top: 0, behavior: 'smooth' });
+        }
+
+        // Retrocompatibilidade
+        function alternarAtor(ator) {
+            if (ator === 'balcao' || ator === 'operador') {
+                navegarPara('/operador');
+            } else {
+                navegarPara('/cliente');
             }
         }
 
         function mudarAba(destino) {
-            ['vitrine', 'detalhe', 'sucesso', 'balcao'].forEach(aba => {
+            ['vitrine', 'detalhe', 'carrinho', 'sucesso', 'balcao', 'login-operador'].forEach(aba => {
                 document.getElementById(`aba-${aba}`)?.classList.add('hidden');
             });
             document.getElementById(`aba-${destino}`)?.classList.remove('hidden');
             window.scrollTo({ top: 0, behavior: 'smooth' });
+        }
+
+        // =====================================================================
+        // CONTROLE DE ACESSO DO OPERADOR (ADMIN / BALCÃO)
+        // =====================================================================
+        function realizarLoginOperador(event) {
+            if (event) event.preventDefault();
+            const user = document.getElementById('op-login-user')?.value.trim();
+            const pass = document.getElementById('op-login-pass')?.value;
+            const filialId = document.getElementById('op-login-filial')?.value;
+
+            if (!user || !pass) {
+                triggerToast("Atenção", "Preencha o usuário e a senha do operador.", "warning");
+                return;
+            }
+
+            operadorLogado = {
+                usuario: user,
+                nome: user.toLowerCase() === 'admin' ? 'Administrador Central' : 'Murilo Alves',
+                matricula: user.toLowerCase() === 'admin' ? 'ADM-001' : 'OP-2024',
+                perfil: user.toLowerCase() === 'admin' ? 'Administrador' : 'Operador de Balcão',
+                filialId: parseInt(filialId || '1', 10)
+            };
+
+            try {
+                sessionStorage.setItem('megaloja_operador', JSON.stringify(operadorLogado));
+            } catch (e) {}
+
+            triggerToast("Acesso Autorizado", `Bem-vindo ao Balcão, ${operadorLogado.nome}!`, "success");
+            navegarPara('/operador', false);
+        }
+
+        function logoutOperador() {
+            operadorLogado = null;
+            try {
+                sessionStorage.removeItem('megaloja_operador');
+            } catch (e) {}
+            triggerToast("Sessão Encerrada", "Operador desconectado com sucesso.", "warning");
+            navegarPara('/operador', false);
+        }
+
+        function atualizarInterfaceOperador() {
+            if (!operadorLogado) return;
+            const badgeNome = document.getElementById('txt-operador-nome-badge');
+            const badgeMat = document.getElementById('txt-operador-matricula');
+            const navLojaOp = document.getElementById('nav-loja-operador-nome');
+
+            if (badgeNome) badgeNome.innerText = `${operadorLogado.perfil}: ${operadorLogado.nome}`;
+            if (badgeMat) badgeMat.innerText = `Matrícula: ${operadorLogado.matricula}`;
+            if (navLojaOp) navLojaOp.innerText = lojaAtiva.nome.replace('MegaLoja - Filial ', '');
+        }
+
+        // =====================================================================
+        // AUTENTICAÇÃO DO CLIENTE (LOGIN & SENHA / CADASTRO)
+        // =====================================================================
+        function abrirModalAuthCliente(tab = 'login') {
+            const modal = document.getElementById('modal-auth-cliente');
+            const content = document.getElementById('modal-auth-content');
+            if (!modal) return;
+            alternarTabAuthCliente(tab);
+            modal.classList.remove('hidden');
+            setTimeout(() => {
+                modal.classList.remove('opacity-0');
+                content?.classList.remove('scale-95');
+            }, 15);
+        }
+
+        function fecharModalAuthCliente() {
+            const modal = document.getElementById('modal-auth-cliente');
+            const content = document.getElementById('modal-auth-content');
+            if (!modal) return;
+            modal.classList.add('opacity-0');
+            content?.classList.add('scale-95');
+            setTimeout(() => modal.classList.add('hidden'), 200);
+        }
+
+        function alternarTabAuthCliente(tab) {
+            const tabLogin = document.getElementById('tab-auth-login');
+            const tabCadastro = document.getElementById('tab-auth-cadastro');
+            const formLogin = document.getElementById('form-auth-login');
+            const formCadastro = document.getElementById('form-auth-cadastro');
+
+            if (!tabLogin || !tabCadastro) return;
+
+            if (tab === 'login') {
+                tabLogin.className = "flex-1 py-3 text-center border-b-2 border-blue-600 text-blue-600 bg-white transition-all flex items-center justify-center gap-1.5";
+                tabCadastro.className = "flex-1 py-3 text-center border-b-2 border-transparent text-gray-500 hover:text-gray-800 transition-all flex items-center justify-center gap-1.5";
+                formLogin?.classList.remove('hidden');
+                formCadastro?.classList.add('hidden');
+            } else {
+                tabCadastro.className = "flex-1 py-3 text-center border-b-2 border-emerald-600 text-emerald-600 bg-white transition-all flex items-center justify-center gap-1.5";
+                tabLogin.className = "flex-1 py-3 text-center border-b-2 border-transparent text-gray-500 hover:text-gray-800 transition-all flex items-center justify-center gap-1.5";
+                formCadastro?.classList.remove('hidden');
+                formLogin?.classList.add('hidden');
+            }
+        }
+
+        function executarLoginCliente(event) {
+            if (event) event.preventDefault();
+            const usuario = document.getElementById('cli-login-usuario')?.value.trim();
+            const senha = document.getElementById('cli-login-senha')?.value;
+
+            if (!usuario || !senha) {
+                triggerToast("Atenção", "Preencha o e-mail/CPF e a senha.", "warning");
+                return;
+            }
+
+            let cadastros = [];
+            try {
+                cadastros = JSON.parse(localStorage.getItem('megaloja_cadastros') || '[]');
+            } catch (e) {}
+
+            const contaEncontrada = cadastros.find(c =>
+                (c.email && c.email.toLowerCase() === usuario.toLowerCase()) ||
+                (c.cpf && c.cpf === usuario)
+            );
+
+            if (contaEncontrada) {
+                clienteLogado = {
+                    nome: contaEncontrada.nome,
+                    cpf: contaEncontrada.cpf,
+                    email: contaEncontrada.email,
+                    telefone: contaEncontrada.telefone
+                };
+            } else {
+                clienteLogado = {
+                    nome: usuario.includes('@') ? usuario.split('@')[0] : 'Cliente MegaLoja',
+                    email: usuario.includes('@') ? usuario : 'cliente@unilasalle.edu.br',
+                    cpf: usuario.includes('@') ? '123.456.789-00' : usuario,
+                    telefone: '(51) 99887-6655'
+                };
+            }
+
+            try {
+                localStorage.setItem('megaloja_cliente', JSON.stringify(clienteLogado));
+            } catch (e) {}
+
+            atualizarInterfaceCliente();
+            fecharModalAuthCliente();
+            triggerToast("Login Concluído", `Bem-vindo de volta, ${clienteLogado.nome}!`, "success");
+        }
+
+        function executarCadastroCliente(event) {
+            if (event) event.preventDefault();
+            const nome = document.getElementById('cli-cad-nome')?.value.trim();
+            const cpf = document.getElementById('cli-cad-cpf')?.value.trim();
+            const telefone = document.getElementById('cli-cad-telefone')?.value.trim();
+            const email = document.getElementById('cli-cad-email')?.value.trim();
+            const senha = document.getElementById('cli-cad-senha')?.value;
+            const senhaConf = document.getElementById('cli-cad-senha-conf')?.value;
+
+            if (!nome || !cpf || !email || !senha) {
+                triggerToast("Atenção", "Preencha todos os campos obrigatórios.", "warning");
+                return;
+            }
+
+            if (senha !== senhaConf) {
+                triggerToast("Erro no Cadastro", "A confirmação de senha não coincide com a senha digitada.", "warning");
+                return;
+            }
+
+            clienteLogado = { nome, cpf, telefone, email };
+
+            try {
+                const cadastros = JSON.parse(localStorage.getItem('megaloja_cadastros') || '[]');
+                cadastros.push({ ...clienteLogado, senha });
+                localStorage.setItem('megaloja_cadastros', JSON.stringify(cadastros));
+                localStorage.setItem('megaloja_cliente', JSON.stringify(clienteLogado));
+            } catch (e) {}
+
+            atualizarInterfaceCliente();
+            fecharModalAuthCliente();
+            triggerToast("Cadastro Realizado", `Conta criada com sucesso! Bem-vindo, ${clienteLogado.nome}.`, "success");
+        }
+
+        function logoutCliente() {
+            clienteLogado = null;
+            try {
+                localStorage.removeItem('megaloja_cliente');
+            } catch (e) {}
+            atualizarInterfaceCliente();
+            triggerToast("Sessão Finalizada", "Você desconectou da sua conta de cliente.", "warning");
+        }
+
+        function atualizarInterfaceCliente() {
+            const boxDeslogado = document.getElementById('auth-cliente-deslogado');
+            const boxLogado = document.getElementById('auth-cliente-logado');
+            const navNome = document.getElementById('nav-cliente-nome');
+            const menuEmail = document.getElementById('menu-cliente-email');
+            const menuCpf = document.getElementById('menu-cliente-cpf');
+
+            if (clienteLogado) {
+                boxDeslogado?.classList.add('hidden');
+                boxLogado?.classList.remove('hidden');
+                if (navNome) navNome.innerText = clienteLogado.nome.split(' ')[0] || clienteLogado.nome;
+                if (menuEmail) menuEmail.innerText = clienteLogado.email || '---';
+                if (menuCpf) menuCpf.innerText = `CPF: ${clienteLogado.cpf || '---'}`;
+
+                // Preenche campos do checkout com dados do cliente
+                const inputNome = document.getElementById('chk-nome-cliente');
+                const inputCpf = document.getElementById('chk-cpf-cliente');
+                if (inputNome && !inputNome.value) inputNome.value = clienteLogado.nome;
+                if (inputCpf && !inputCpf.value) inputCpf.value = clienteLogado.cpf;
+            } else {
+                boxLogado?.classList.add('hidden');
+                boxDeslogado?.classList.remove('hidden');
+            }
+        }
+
+        function abrirMeusPedidos() {
+            if (pedidoAtivo) {
+                mudarAba('sucesso');
+            } else {
+                triggerToast("Meus Pedidos", "Você ainda não possui pedidos em andamento nesta sessão.", "warning");
+                mudarAba('vitrine');
+            }
+        }
+
+        function abrirCarrinho() {
+            triggerToast("Carrinho Click & Collect", "Selecione qualquer produto na vitrine para comprar e retirar na filial com frete grátis!", "success");
         }
 
         // Modal de Filiais (RF001)
@@ -387,9 +827,16 @@
         }
 
         function atualizarLayoutFocoLoja() {
-            document.getElementById('nav-loja-nome').innerText = lojaAtiva.nome.replace('MegaLoja - Filial ', '');
-            document.getElementById('txt-status-loja-nome').innerText = lojaAtiva.nome;
-            document.getElementById('txt-balcao-loja-nome').innerText = lojaAtiva.nome;
+            const nomeCurto = lojaAtiva.nome.replace('MegaLoja - Filial ', '');
+            const elNav = document.getElementById('nav-loja-nome');
+            const elStatus = document.getElementById('txt-status-loja-nome');
+            const elBalcao = document.getElementById('txt-balcao-loja-nome');
+            const elNavOp = document.getElementById('nav-loja-operador-nome');
+
+            if (elNav) elNav.innerText = nomeCurto;
+            if (elStatus) elStatus.innerText = lojaAtiva.nome;
+            if (elBalcao) elBalcao.innerText = lojaAtiva.nome;
+            if (elNavOp) elNavOp.innerText = nomeCurto;
 
             if (!produtoSelecionado) return;
 
@@ -465,6 +912,8 @@
 
                 pedidoAtivo = resp.order;
                 atualizarTelaSucessoComprovante(pedidoAtivo);
+                const badge = document.getElementById('nav-carrinho-badge');
+                if (badge) badge.innerText = '0';
                 mudarAba('sucesso');
                 triggerToast("Pedido Confirmado!", "Ordem de separação enviada ao operador da filial (UC004).", "success");
                 await recarregarPedidosBalcao();
