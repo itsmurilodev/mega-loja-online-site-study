@@ -78,6 +78,16 @@
                         <span id="nav-carrinho-badge" class="bg-blue-600 text-white text-[10px] font-black px-1.5 py-0.5 rounded-full leading-none">0</span>
                     </button>
 
+                    <!-- Seletor de Papéis (Cliente vs Operador de Retaguarda) -->
+                    <div class="bg-gray-100 p-1 rounded-xl flex border border-gray-200 text-xs shadow-inner">
+                        <button id="btn-visao-cliente" onclick="alternarAtor('cliente')" class="bg-white text-gray-900 font-bold px-3 py-1.5 rounded-lg shadow-sm transition-all flex items-center gap-1.5">
+                            <i class="fa-solid fa-user text-blue-600"></i> Cliente
+                        </button>
+                        <button id="btn-visao-balcao" onclick="alternarAtor('balcao')" class="text-gray-500 hover:text-gray-900 font-semibold px-3 py-1.5 rounded-lg transition-all flex items-center gap-1.5">
+                            <i class="fa-solid fa-dolly text-amber-600"></i> Balcão / Operador
+                        </button>
+                    </div>
+
                     <!-- Área de Autenticação do Cliente (Login & Senha / Cadastro) -->
                     <div id="auth-cliente-deslogado" class="flex items-center">
                         <button onclick="abrirModalAuthCliente('login')" class="bg-blue-600 hover:bg-blue-700 text-white font-bold px-3 py-2 rounded-xl text-xs shadow-sm transition-all flex items-center gap-1.5 hover:shadow">
