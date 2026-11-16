@@ -8,12 +8,12 @@ import { AppService } from "./app.service";
 export class AppController {
   constructor(private readonly appService: AppService) {}
 
-  private serveFrontHtml(res: Response): void {
+  private serveFrontHtml(res: Response, fileName = "front.html"): void {
     const candidates = [
-      path.resolve(process.cwd(), "frontend", "front.html"),
-      path.resolve(__dirname, "..", "..", "frontend", "front.html"),
-      path.resolve(process.cwd(), "front.html"),
-      path.resolve(__dirname, "..", "..", "front.html"),
+      path.resolve(process.cwd(), "frontend", fileName),
+      path.resolve(__dirname, "..", "..", "frontend", fileName),
+      path.resolve(process.cwd(), fileName),
+      path.resolve(__dirname, "..", "..", fileName),
     ];
 
     for (const htmlPath of candidates) {
@@ -47,19 +47,15 @@ export class AppController {
     this.serveFrontHtml(res);
   }
 
-  @Get("operador")
+  // Portal do operador/empresa: página própria, com login separado da loja.
+  @Get(["operador", "balcao", "admin"])
   getOperador(@Res() res: Response): void {
-    this.serveFrontHtml(res);
+    this.serveFrontHtml(res, "operador.html");
   }
 
-  @Get("balcao")
-  getBalcao(@Res() res: Response): void {
-    this.serveFrontHtml(res);
-  }
-
-  @Get("admin")
-  getAdmin(@Res() res: Response): void {
-    this.serveFrontHtml(res);
+  @Get("operador.html")
+  getOperadorHtml(@Res() res: Response): void {
+    this.serveFrontHtml(res, "operador.html");
   }
 
   @Get("api")

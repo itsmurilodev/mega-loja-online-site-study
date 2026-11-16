@@ -3,6 +3,7 @@ import { ConfigModule } from "@nestjs/config";
 import { APP_FILTER, APP_INTERCEPTOR } from "@nestjs/core";
 import { AppController } from "./app.controller";
 import { AppService } from "./app.service";
+import { AuthModule } from "./auth/auth.module";
 import { AllExceptionsFilter } from "./common/filters/all-exceptions.filter";
 import { RnfMetricsInterceptor } from "./common/interceptors/rnf-metrics.interceptor";
 import { RnfMetricsModule } from "./common/metrics/rnf-metrics.module";
@@ -19,6 +20,7 @@ import { SupabaseModule } from "./supabase/supabase.module";
     }),
     RnfMetricsModule,
     SupabaseModule,
+    AuthModule,
     StoresModule,
     ProductsModule,
     PaymentsModule,

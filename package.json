@@ -10,7 +10,8 @@
     "start:dev": "nest start --watch",
     "start:prod": "node dist/backend/src/main.js",
     "test": "vitest run",
-    "test:contract": "vitest run"
+    "test:contract": "vitest run",
+    "seed:usuario": "ts-node scripts/seed-usuario.ts"
   },
   "dependencies": {
     "@nestjs/common": "^10.4.15",

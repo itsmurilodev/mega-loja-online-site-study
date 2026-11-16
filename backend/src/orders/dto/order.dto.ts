@@ -34,3 +34,21 @@ export interface UpdateOrderStatusDto {
   pickup_code?: string;
   is_third_party?: boolean;
 }
+
+export interface CheckoutItemDto {
+  product_id?: number;
+  quantity?: number;
+}
+
+/** S3-15: checkout do carrinho com vários itens. */
+export interface CheckoutDto {
+  customer_name?: string;
+  customer_cpf?: string;
+  delivery_method?: string;
+  store_id?: number;
+  items?: CheckoutItemDto[];
+  card_number?: string;
+  simulate_payment_failure?: boolean;
+  third_party_name?: string | null;
+  third_party_cpf?: string | null;
+}

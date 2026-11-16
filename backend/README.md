@@ -75,8 +75,15 @@ backend/
 | `GET` | `/api/health` | **RNF001 / RNF002** | Diagnóstico de integridade, verificação de segredos e resumo do SLA RNF001 |
 | `GET` | `/api/metrics/rnf001` | **RNF001 ($\le$ 60s)** | Relatório detalhado de tempos de resposta de consulta e reserva de estoque |
 | `GET` | `/api/stores` | RF001 / UC002 | Lista filiais ativas (aceita `?city=` e `?product_id=` para estoque) |
-| `GET` | `/api/products` | RF002 | Lista produtos do Supabase com `price`, `image_url`, `sku` e `barcode` |
-| `GET` | `/api/orders` | RF005 | Lista pedidos com join de produto e filial (`?store_id=` e `?status=`) |
+| `GET` | `/api/products` | RF002 | Lista produtos do Supabase com `price`, `image_url`, `sku` e `barcode` (`?include=stock` traz o estoque de todas as filiais em `stocks`) |
+| `POST` | `/api/products` | **S3-08** · papel `empresa` | Cria produto (nome, categoria, preço > 0, SKU único, código de barras, link da imagem e `stock` por filial) |
+| `PATCH` | `/api/products/:id` | **S3-08** · papel `empresa` | Altera preço, imagem, SKU, categoria e estoque por filial |
+| `POST` | `/api/auth/login` | **S3-07** | Login pelo Supabase Auth (`portal: "operador"` só aceita operador/empresa); devolve `access_token` e o usuário |
+| `POST` | `/api/auth/register` | **S3-07** | Cria conta de **cliente** (sempre com esse papel) |
+| `GET` | `/api/auth/me` | **S3-07** | Usuário do token enviado em `Authorization: Bearer` |
+| `POST` | `/api/orders/checkout` | **S3-30** | Carrinho com vários itens: confere todo o estoque, cobra uma vez e cria um pedido por item |
+| `GET` | `/api/orders/mine` | S3-27 · papel `cliente` | Pedidos do cliente logado (pelo CPF do cadastro) |
+| `GET` | `/api/orders` | RF005 · papel `operador`/`empresa` | Lista pedidos com join de produto e filial (`?store_id=` e `?status=`) |
 | `GET` | `/api/orders/:id` | RF005 | Detalhes completos de um pedido específico |
 | `GET` | `/api/orders/:id/notifications` | RF004 | Histórico de notificações do pedido |
 | `POST` | `/api/orders` | **UC003 / RNF001** | Finalizar compra, validar/reservar estoque ($\le$ 60s) e cobrar cartão |
@@ -85,3 +92,5 @@ backend/
 | `POST` | `/api/orders/validate-pickup` | **UC007** | Validar retirada presencial (QR Code ou CPF) com conferência de documento |
 | `POST` | `/api/orders/:id/expire` | Abandono | Expirar pedido por não-comparecimento (7 dias) e devolver item ao estoque |
 | `PATCH` | `/api/orders/:id/status` | Compatibilidade | Atualização genérica de status delegando para os casos de uso oficiais |
+
+**Autenticação (S3-14):** `separate`, `rupture`, `validate-pickup` (e o alias `pickup`), `expire`, `PATCH status` e a listagem `GET /api/orders` exigem `Authorization: Bearer <access_token>` de uma conta `operador` ou `empresa` (`401` sem token ou token inválido, `403` com papel errado). `POST/PATCH /api/products` exigem `empresa`. Criar pedido e consultar um pedido continuam abertos para o cliente. Contas de operador/empresa são criadas com `npm run seed:usuario` (ver README da raiz).

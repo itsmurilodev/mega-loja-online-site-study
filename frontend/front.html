@@ -3,16 +3,15 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>MegaLoja Click & Collect • Trabalho G2 Unilasalle</title>
+    <title>MegaLoja Click & Collect • Compre online e retire na loja</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <link rel="stylesheet" href="css/styles.css">
-
 </head>
 <body class="bg-gray-100 text-gray-900 flex flex-col min-h-screen antialiased">
 
-    <!-- BARRA SUPERIOR INSTITUCIONAL (TRABALHO G2 - UNILASALLE) -->
+    <!-- BARRA SUPERIOR INSTITUCIONAL -->
     <div class="bg-blue-900 text-white text-xs py-2 px-4 shadow-sm">
         <div class="container mx-auto max-w-7xl flex flex-col sm:flex-row justify-between items-center gap-2">
             <div class="flex items-center space-x-3 text-[11px]">
@@ -21,196 +20,110 @@
                 </span>
                 <span class="text-gray-400">|</span>
                 <span class="text-gray-200">Laboratório de Eng. de Software — Trabalho G2</span>
-                <span class="hidden md:inline text-gray-400">|</span>
-                <span class="hidden md:inline text-gray-300">Sistema Central Click & Collect</span>
             </div>
-            <div class="flex items-center flex-wrap gap-2 text-[10px]">
-                <span class="bg-blue-800 text-blue-200 px-2 py-0.5 rounded font-mono hidden lg:inline">Scrum: Murilo (SM), João (PO), Leo & Gui (Dev), Júlia (Testes)</span>
-                
-                <!-- Roteamento Explícito: Rota do Cliente vs Rota do Operador/Admin -->
-                <div class="flex items-center bg-blue-950/90 rounded-xl p-0.5 border border-blue-700/60 shadow-inner">
-                    <button id="pill-rota-cliente" onclick="navegarPara('/cliente')" class="px-2.5 py-1 rounded-lg font-bold transition-all flex items-center gap-1.5 bg-white text-blue-950 shadow-sm" title="Ir para a Rota do Cliente">
-                        <i class="fa-solid fa-cart-shopping text-blue-600"></i> Loja Cliente <span class="hidden sm:inline font-mono text-[9px] opacity-75">(/cliente)</span>
-                    </button>
-                    <button id="pill-rota-operador" onclick="navegarPara('/operador')" class="px-2.5 py-1 rounded-lg font-bold transition-all flex items-center gap-1.5 text-blue-200 hover:text-white" title="Ir para a Rota do Operador / Balcão (Admin)">
-                        <i class="fa-solid fa-dolly text-amber-400"></i> Balcão Operador <span class="hidden sm:inline font-mono text-[9px] opacity-75">(/operador)</span>
-                    </button>
-                </div>
-            </div>
+            <span class="text-[11px] text-blue-200 flex items-center gap-1.5">
+                <i class="fa-solid fa-store text-amber-400"></i> Compre online e retire na filial com frete grátis
+            </span>
         </div>
     </div>
 
-    <!-- CABEÇALHO DA ROTA DO CLIENTE -->
-    <header id="header-cliente" class="bg-white shadow-md sticky top-0 z-40 transition-all">
+    <!-- CABEÇALHO DA LOJA -->
+    <header id="header-cliente" class="bg-white shadow-md sticky top-0 z-40">
         <div class="border-b border-gray-200">
             <div class="container mx-auto px-4 py-3.5 flex flex-col lg:flex-row justify-between items-center max-w-7xl gap-4">
-                
-                <div class="flex items-center space-x-3 cursor-pointer select-none" onclick="navegarPara('/cliente'); mudarAba('vitrine');">
+
+                <button type="button" class="flex items-center space-x-3 select-none" onclick="irParaVitrine()" aria-label="Voltar para a página inicial">
                     <div class="bg-blue-600 text-white p-2 rounded-xl font-black tracking-tight text-lg shadow-md shadow-blue-600/20 flex items-center justify-center">
                         <i class="fa-solid fa-building-flag mr-2 text-amber-300"></i> MEGA LOJA
                         <span class="text-[10px] bg-white text-blue-700 px-1.5 py-0.5 rounded ml-2 font-bold uppercase tracking-wider">Click & Collect</span>
                     </div>
-                </div>
+                </button>
 
                 <div class="w-full lg:flex-1 lg:max-w-md relative">
                     <input type="text" id="input-busca" onkeyup="filtrarPorNome()" placeholder="Buscar por nome, categoria, SKU ou código de barras..." aria-label="Buscar produtos" class="w-full pl-4 pr-12 py-2 border border-gray-300 rounded-xl text-xs focus:outline-none focus:border-blue-600 focus:ring-1 focus:ring-blue-600 transition-all shadow-inner">
-                    <button class="absolute right-2 top-1.5 bg-blue-600 text-white px-2.5 py-1 rounded-lg text-xs font-bold hover:bg-blue-700 transition-colors">
+                    <span class="absolute right-2 top-1.5 bg-blue-600 text-white px-2.5 py-1 rounded-lg text-xs font-bold pointer-events-none">
                         <i class="fa-solid fa-magnifying-glass"></i>
-                    </button>
+                    </span>
                 </div>
 
-                <div class="flex items-center space-x-4 w-full lg:w-auto justify-between lg:justify-end border-t lg:border-t-0 pt-3 lg:pt-0">
-                    <!-- Filial Selecionada (RF001) -->
-                    <div class="flex items-center space-x-2 cursor-pointer hover:text-blue-600 transition-colors group" onclick="abrirModalLoja()" title="Clique para alterar a filial de retirada">
+                <div class="flex items-center space-x-3 w-full lg:w-auto justify-between lg:justify-end border-t lg:border-t-0 pt-3 lg:pt-0">
+                    <!-- Filial de retirada -->
+                    <button type="button" class="flex items-center space-x-2 hover:text-blue-600 transition-colors group text-left" onclick="abrirModalLoja()" title="Alterar a filial de retirada">
                         <div class="bg-gray-100 p-2 rounded-xl group-hover:bg-blue-50 transition-colors">
                             <i class="fa-solid fa-location-dot text-blue-600 text-base"></i>
                         </div>
-                        <div class="text-left">
-                            <p class="text-[9px] text-gray-400 font-extrabold uppercase tracking-wider leading-none">Filial de Retirada (RF001):</p>
+                        <div>
+                            <p class="text-[9px] text-gray-400 font-extrabold uppercase tracking-wider leading-none">Retirar em:</p>
                             <p id="nav-loja-nome" class="text-xs font-black text-gray-800 mt-0.5">Canoas Centro</p>
                         </div>
-                    </div>
+                    </button>
 
-                    <!-- Botão Carrinho -->
-                    <button onclick="abrirCarrinho()" class="flex items-center space-x-2 bg-gray-100 hover:bg-blue-50 text-gray-800 hover:text-blue-600 px-3 py-2 rounded-xl text-xs font-bold transition-all border border-gray-200 shadow-sm" title="Ver Carrinho">
+                    <!-- Carrinho -->
+                    <button type="button" onclick="abrirCarrinho()" class="flex items-center space-x-2 bg-gray-100 hover:bg-blue-50 text-gray-800 hover:text-blue-600 px-3 py-2 rounded-xl text-xs font-bold transition-all border border-gray-200 shadow-sm" title="Ver carrinho">
                         <i class="fa-solid fa-cart-shopping text-blue-600 text-sm"></i>
                         <span class="hidden sm:inline">Carrinho</span>
                         <span id="nav-carrinho-badge" class="bg-blue-600 text-white text-[10px] font-black px-1.5 py-0.5 rounded-full leading-none">0</span>
                     </button>
 
-                    <!-- Seletor de Papéis (Cliente vs Operador de Retaguarda) -->
-                    <div class="bg-gray-100 p-1 rounded-xl flex border border-gray-200 text-xs shadow-inner">
-                        <button id="btn-visao-cliente" onclick="alternarAtor('cliente')" class="bg-white text-gray-900 font-bold px-3 py-1.5 rounded-lg shadow-sm transition-all flex items-center gap-1.5">
-                            <i class="fa-solid fa-user text-blue-600"></i> Cliente
-                        </button>
-                        <button id="btn-visao-balcao" onclick="alternarAtor('balcao')" class="text-gray-500 hover:text-gray-900 font-semibold px-3 py-1.5 rounded-lg transition-all flex items-center gap-1.5">
-                            <i class="fa-solid fa-dolly text-amber-600"></i> Balcão / Operador
-                        </button>
-                    </div>
-
-                    <!-- Área de Autenticação do Cliente (Login & Senha / Cadastro) -->
+                    <!-- Conta do cliente -->
                     <div id="auth-cliente-deslogado" class="flex items-center">
-                        <button onclick="abrirModalAuthCliente('login')" class="bg-blue-600 hover:bg-blue-700 text-white font-bold px-3 py-2 rounded-xl text-xs shadow-sm transition-all flex items-center gap-1.5 hover:shadow">
+                        <button type="button" onclick="abrirModalAuthCliente('login')" class="bg-blue-600 hover:bg-blue-700 text-white font-bold px-3 py-2 rounded-xl text-xs shadow-sm transition-all flex items-center gap-1.5">
                             <i class="fa-solid fa-circle-user text-sm"></i>
                             <span>Entrar / Cadastrar</span>
                         </button>
                     </div>
 
                     <div id="auth-cliente-logado" class="hidden relative group">
-                        <button class="bg-blue-50 border border-blue-200 text-blue-900 font-bold px-3 py-1.5 rounded-xl shadow-sm text-xs flex items-center gap-2 hover:bg-blue-100 transition-all">
+                        <button type="button" class="bg-blue-50 border border-blue-200 text-blue-900 font-bold px-3 py-1.5 rounded-xl shadow-sm text-xs flex items-center gap-2 hover:bg-blue-100 transition-all">
                             <div class="w-6 h-6 rounded-full bg-blue-600 text-white flex items-center justify-center text-[10px] font-black">
                                 <i class="fa-solid fa-user"></i>
                             </div>
                             <div class="text-left leading-tight">
-                                <span class="text-[9px] text-gray-500 block font-medium">Cliente</span>
-                                <span id="nav-cliente-nome" class="text-xs font-black text-blue-950">Murilo Alves</span>
+                                <span class="text-[9px] text-gray-500 block font-medium">Olá,</span>
+                                <span id="nav-cliente-nome" class="text-xs font-black text-blue-950">Cliente</span>
                             </div>
                             <i class="fa-solid fa-chevron-down text-[9px] text-gray-400 group-hover:rotate-180 transition-transform"></i>
                         </button>
-                        <div class="absolute right-0 mt-1 w-56 bg-white border border-gray-200 rounded-xl shadow-xl py-2 z-50 text-xs hidden group-hover:block transition-all">
-                            <div class="px-4 py-2 border-b border-gray-100">
-                                <p class="text-[9px] text-gray-400 uppercase font-black tracking-wider">Conta do Cliente</p>
-                                <p id="menu-cliente-email" class="font-bold text-gray-800 truncate">murilo@unilasalle.edu.br</p>
-                                <p id="menu-cliente-cpf" class="text-[10px] text-gray-500 font-mono mt-0.5">CPF: 123.456.789-00</p>
+                        <div class="absolute right-0 mt-0 pt-1 w-56 z-50 text-xs hidden group-hover:block group-focus-within:block">
+                            <div class="bg-white border border-gray-200 rounded-xl shadow-xl py-2">
+                                <div class="px-4 py-2 border-b border-gray-100">
+                                    <p class="text-[9px] text-gray-400 uppercase font-black tracking-wider">Minha conta</p>
+                                    <p id="menu-cliente-email" class="font-bold text-gray-800 truncate">---</p>
+                                    <p id="menu-cliente-cpf" class="text-[10px] text-gray-500 font-mono mt-0.5">---</p>
+                                </div>
+                                <button type="button" onclick="abrirMeusPedidos()" class="w-full text-left flex items-center gap-2 px-4 py-2.5 hover:bg-blue-50 text-gray-700 font-semibold transition-colors">
+                                    <i class="fa-solid fa-receipt text-blue-600"></i> Meus pedidos
+                                </button>
+                                <div class="border-t border-gray-100 my-1"></div>
+                                <button type="button" onclick="logoutCliente()" class="w-full text-left flex items-center gap-2 px-4 py-2.5 hover:bg-red-50 text-red-600 font-semibold transition-colors">
+                                    <i class="fa-solid fa-right-from-bracket"></i> Sair da conta
+                                </button>
                             </div>
-                            <a href="javascript:void(0)" onclick="abrirMeusPedidos()" class="flex items-center gap-2 px-4 py-2.5 hover:bg-blue-50 text-gray-700 font-semibold transition-colors">
-                                <i class="fa-solid fa-receipt text-blue-600"></i> Acompanhar Pedido / Voucher
-                            </a>
-                            <div class="border-t border-gray-100 my-1"></div>
-                            <a href="javascript:void(0)" onclick="logoutCliente()" class="flex items-center gap-2 px-4 py-2.5 hover:bg-red-50 text-red-600 font-semibold transition-colors">
-                                <i class="fa-solid fa-right-from-bracket"></i> Desconectar Conta
-                            </a>
                         </div>
                     </div>
-
                 </div>
 
             </div>
         </div>
 
-        <!-- CATEGORIAS -->
-        <div class="bg-blue-600 text-white text-xs font-semibold shadow-inner">
-            <div class="container mx-auto px-4 max-w-7xl flex items-center space-x-2 overflow-x-auto scrollbar-none py-1.5">
-                <button onclick="filtrarCategoria('todos')" id="cat-todos" class="bg-white text-blue-700 px-3 py-1 rounded-lg font-bold shadow-sm whitespace-nowrap">
-                    <i class="fa-solid fa-border-all mr-1"></i> Todos os Departamentos
-                </button>
-                <button onclick="filtrarCategoria('eletronicos')" id="cat-eletronicos" class="hover:bg-blue-700 px-3 py-1 rounded-lg transition-colors whitespace-nowrap">
-                    <i class="fa-solid fa-tv mr-1"></i> Eletrônicos
-                </button>
-                <button onclick="filtrarCategoria('casa')" id="cat-casa" class="hover:bg-blue-700 px-3 py-1 rounded-lg transition-colors whitespace-nowrap">
-                    <i class="fa-solid fa-screwdriver-wrench mr-1"></i> Ferramentas & Casa
-                </button>
-                <button onclick="filtrarCategoria('eletrodomesticos')" id="cat-eletrodomesticos" class="hover:bg-blue-700 px-3 py-1 rounded-lg transition-colors whitespace-nowrap">
-                    <i class="fa-solid fa-couch mr-1"></i> Eletrodomésticos
-                </button>
-            </div>
+        <!-- Departamentos (montados a partir do catálogo) -->
+        <div id="barra-departamentos" class="bg-blue-600 text-white text-xs font-semibold shadow-inner">
+            <div id="barra-categorias" class="container mx-auto px-4 max-w-7xl flex items-center space-x-2 overflow-x-auto scrollbar-none py-1.5"></div>
         </div>
     </header>
 
-    <!-- CABEÇALHO DA ROTA DO OPERADOR / BALCÃO (ADMIN) -->
-    <header id="header-operador" class="bg-slate-900 text-white shadow-lg sticky top-0 z-40 hidden border-b border-slate-800">
-        <div class="container mx-auto px-4 py-3 flex flex-col md:flex-row justify-between items-center max-w-7xl gap-3">
-            <div class="flex items-center space-x-3 cursor-pointer" onclick="navegarPara('/operador')">
-                <div class="bg-amber-500 text-slate-950 p-2.5 rounded-xl font-black text-sm flex items-center justify-center shadow-lg shadow-amber-500/20">
-                    <i class="fa-solid fa-dolly mr-2 text-base"></i> OPERADOR & BALCÃO
-                </div>
-                <div>
-                    <div class="flex items-center gap-2">
-                        <p class="text-xs font-black tracking-tight text-white uppercase">Portal Administrativo Click & Collect</p>
-                        <span class="bg-amber-400/20 text-amber-300 border border-amber-400/30 text-[9px] font-mono px-2 py-0.5 rounded-full font-bold">ADMIN / BALCÃO</span>
-                    </div>
-                    <p class="text-[10px] text-slate-400">Retaguarda de separação física (UC005) e conferência presencial (UC007)</p>
-                </div>
-            </div>
-
-            <div class="flex items-center flex-wrap justify-center gap-3">
-                <!-- Filial Operacional -->
-                <div class="flex items-center space-x-2 bg-slate-800 border border-slate-700 px-3 py-1.5 rounded-xl cursor-pointer hover:border-amber-400 transition-colors" onclick="abrirModalLoja()" title="Alterar filial de operação">
-                    <div class="bg-slate-700 p-1.5 rounded-lg">
-                        <i class="fa-solid fa-shop text-amber-400 text-xs"></i>
-                    </div>
-                    <div class="text-left">
-                        <p class="text-[8px] text-slate-400 font-extrabold uppercase">Unidade Operacional:</p>
-                        <p id="nav-loja-operador-nome" class="text-xs font-bold text-slate-100">Canoas Centro</p>
-                    </div>
-                </div>
-
-                <!-- Dados do Operador Autenticado -->
-                <div id="box-operador-identificacao" class="flex items-center space-x-2 bg-slate-800/90 border border-slate-700 px-3 py-1.5 rounded-xl text-xs">
-                    <div class="w-7 h-7 rounded-full bg-amber-500 text-slate-950 flex items-center justify-center font-bold text-xs shadow-inner">
-                        <i class="fa-solid fa-user-shield"></i>
-                    </div>
-                    <div>
-                        <span id="txt-operador-nome-badge" class="font-bold text-slate-100 block text-[11px] leading-tight">Operador: Murilo Alves</span>
-                        <span id="txt-operador-matricula" class="text-[9px] text-amber-400 font-mono block">Matrícula: OP-2024</span>
-                    </div>
-                </div>
-
-                <!-- Botão Sair / Bloquear Sessão do Operador -->
-                <button onclick="logoutOperador()" class="bg-red-500/10 hover:bg-red-500/20 text-red-300 border border-red-500/30 px-3 py-1.5 rounded-xl text-xs font-semibold flex items-center gap-1.5 transition-colors" title="Encerrar sessão de operador">
-                    <i class="fa-solid fa-lock"></i> <span>Sair</span>
-                </button>
-
-                <!-- Atalho para voltar à Loja Cliente -->
-                <button onclick="navegarPara('/cliente')" class="bg-blue-600 hover:bg-blue-700 text-white px-3 py-1.5 rounded-xl text-xs font-semibold flex items-center gap-1.5 transition-colors shadow-sm" title="Abrir rota da loja do cliente">
-                    <i class="fa-solid fa-store"></i> <span>Loja Cliente</span>
-                </button>
-            </div>
-        </div>
-    </header>
-
-    <!-- BANNER PROMOCIONAL CLICK & COLLECT -->
+    <!-- BANNER -->
     <div id="wrapper-banner" class="container mx-auto px-4 mt-6 max-w-7xl">
         <div class="bg-gradient-to-r from-blue-700 via-indigo-700 to-blue-800 text-white rounded-2xl p-6 md:p-8 shadow-lg flex flex-col md:flex-row justify-between items-center gap-6 relative overflow-hidden border border-blue-800">
             <div class="space-y-2.5 z-10 text-center md:text-left">
                 <span class="bg-amber-400 text-slate-900 text-[10px] font-black px-2.5 py-1 rounded-full uppercase tracking-widest shadow-sm">
-                    <i class="fa-solid fa-bolt mr-1"></i> Click & Collect Integrado
+                    <i class="fa-solid fa-bolt mr-1"></i> Click & Collect
                 </span>
                 <h2 class="text-2xl md:text-3xl font-extrabold tracking-tight max-w-xl leading-tight">
-                    Compre Online e Retire na Filial com Frete Grátis
+                    Compre online e retire na filial com frete grátis
                 </h2>
                 <p class="text-xs text-blue-100 max-w-lg">
-                    Integração em tempo real com o Sistema de Estoque (S.E.). Validação segura por QR Code criptografado no balcão de atendimento.
+                    Estoque conferido em tempo real na filial que você escolher. A retirada é liberada com um QR Code exclusivo.
                 </p>
             </div>
             <div class="bg-white/10 border border-white/20 backdrop-blur-md rounded-xl p-4 text-center min-w-[210px] z-10 shadow-lg">
@@ -221,14 +134,10 @@
         </div>
     </div>
 
-    <!-- ÁREA PRINCIPAL DINÂMICA -->
     <main class="container mx-auto px-4 py-8 flex-grow max-w-7xl">
 
-        <!-- ============================================================== -->
-        <!-- ABA 1: VITRINE DE PRODUTOS COM ESTOQUE POR FILIAL (RF001/RF002) -->
-        <!-- ============================================================== -->
-        <section id="aba-vitrine" class="grid grid-cols-1 lg:grid-cols-4 gap-6 items-start transition-all duration-300">
-            <!-- Barra lateral com filtros e rastreabilidade do trabalho G2 -->
+        <!-- ============================ VITRINE ============================ -->
+        <section id="aba-vitrine" class="grid grid-cols-1 lg:grid-cols-4 gap-6 items-start">
             <div class="bg-white border border-gray-200 rounded-2xl p-5 shadow-sm space-y-5">
                 <div>
                     <h3 class="text-xs font-black uppercase text-gray-400 tracking-wider mb-3">
@@ -255,14 +164,12 @@
                 </div>
             </div>
 
-            <!-- Grid de Produtos -->
             <div class="lg:col-span-3 space-y-4">
                 <div class="flex justify-between items-center bg-white p-4 rounded-xl border border-gray-200 shadow-sm">
                     <h2 class="text-sm font-black tracking-tight text-gray-900 uppercase" id="titulo-vitrine">Todos os Departamentos</h2>
                     <span class="text-xs text-gray-400 font-mono" id="contador-produtos">Carregando catálogo...</span>
                 </div>
 
-                <!-- S2-11: ordenação e filtro de estoque da pesquisa -->
                 <div class="flex flex-wrap justify-between items-center gap-3 bg-white px-4 py-3 rounded-xl border border-gray-200 shadow-sm text-xs">
                     <label class="flex items-center gap-2 font-medium text-gray-700 cursor-pointer">
                         <input type="checkbox" id="filtro-com-estoque" onchange="executarFiltrosCombinados()" class="text-blue-600">
@@ -285,29 +192,25 @@
         </section>
 
 
-        <!-- ============================================================== -->
-        <!-- ABA 2: PÁGINA DO PRODUTO (PREÇO, PIX COM DESCONTO E 12X)      -->
-        <!-- ============================================================== -->
-        <section id="aba-detalhe" class="hidden grid grid-cols-1 lg:grid-cols-12 gap-8 items-start transition-all duration-300">
+        <!-- ========================= PÁGINA DO PRODUTO ========================= -->
+        <section id="aba-detalhe" class="hidden grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
             <div class="lg:col-span-12">
-                <button onclick="mudarAba('vitrine')" class="text-xs font-bold text-blue-600 hover:text-blue-800 flex items-center gap-1.5 transition-colors">
+                <button type="button" onclick="irParaVitrine()" class="text-xs font-bold text-blue-600 hover:text-blue-800 flex items-center gap-1.5 transition-colors">
                     <i class="fa-solid fa-chevron-left text-[10px]"></i> Voltar para a vitrine
                 </button>
             </div>
 
-            <!-- Imagem e Ficha Técnica do Item -->
             <div class="lg:col-span-7 bg-white border border-gray-200 rounded-2xl p-6 flex flex-col items-center justify-center shadow-sm relative min-h-[420px]">
                 <div class="absolute top-4 left-4 bg-emerald-50 text-emerald-700 text-[10px] font-black px-2.5 py-1 rounded-lg border border-emerald-100 flex items-center gap-1">
                     <i class="fa-solid fa-store text-emerald-600"></i> Click & Collect Habilitado
                 </div>
-                <img id="detalhe-imagem" src="" alt="Produto Real" class="max-h-72 object-contain rounded-xl shadow-sm transition-transform hover:scale-105 duration-300">
+                <img id="detalhe-imagem" src="" alt="" class="max-h-72 object-contain rounded-xl shadow-sm transition-transform hover:scale-105 duration-300">
                 <div class="mt-4 text-center">
                     <span id="detalhe-categoria" class="text-[9px] font-black text-blue-600 uppercase tracking-widest bg-blue-50 px-2 py-0.5 rounded">Categoria</span>
-                    <h1 id="detalhe-nome" class="text-lg font-black text-gray-900 mt-2 tracking-tight">Nome Comercial Completo</h1>
-                    <p class="text-[11px] text-gray-500 font-mono mt-1" id="detalhe-codigos">SKU: --- | Barcode: ---</p>
+                    <h1 id="detalhe-nome" class="text-lg font-black text-gray-900 mt-2 tracking-tight">Produto</h1>
+                    <p class="text-[11px] text-gray-500 font-mono mt-1" id="detalhe-codigos">SKU: --- | Código de barras: ---</p>
                 </div>
 
-                <!-- RF006: Descrição, garantia e ficha técnica (S2-19) -->
                 <div id="detalhe-ficha" class="mt-6 w-full border-t border-gray-100 pt-5 text-left space-y-4">
                     <div>
                         <h2 class="text-[11px] font-black text-gray-700 uppercase tracking-wide">Descrição do Produto</h2>
@@ -324,32 +227,22 @@
                         <h2 class="text-[11px] font-black text-gray-700 uppercase tracking-wide">Ficha Técnica</h2>
                         <dl id="detalhe-ficha-tecnica" class="mt-1.5 border border-gray-100 rounded-xl divide-y divide-gray-100 text-xs"></dl>
                     </div>
-                    <p class="text-[10px] text-gray-400">Dados de exemplo para a demonstração (RF006).</p>
                 </div>
             </div>
 
-            <!-- Card de Preço e Compra -->
             <div class="lg:col-span-5 bg-white border border-gray-200 rounded-2xl p-6 shadow-sm space-y-5">
-                
-                <!-- Bloco de Preço, Pix e Parcelamento -->
                 <div class="bg-gradient-to-br from-gray-50 via-slate-50 to-blue-50/40 p-5 rounded-2xl border border-gray-100 space-y-4">
-                    <!-- Preço Normal / De tabela -->
                     <div>
                         <span class="text-[10px] text-gray-400 font-bold uppercase tracking-wider block">Preço</span>
-                        <div class="flex items-baseline gap-2 mt-0.5">
-                            <span id="detalhe-preco" class="text-xl font-bold text-gray-700">R$ 0,00</span>
-                        </div>
+                        <span id="detalhe-preco" class="text-xl font-bold text-gray-700">R$ 0,00</span>
                     </div>
 
-                    <!-- Desconto com PIX de 5% e o valor com desconto -->
                     <div class="bg-white p-4 rounded-xl border border-emerald-200 shadow-sm space-y-1.5">
                         <div class="flex items-center justify-between">
                             <span class="flex items-center gap-1.5 text-xs font-black text-emerald-700 uppercase tracking-wider">
                                 <i class="fa-brands fa-pix text-base text-emerald-600"></i> No Pix
                             </span>
-                            <span class="text-[10px] font-black text-emerald-700 bg-emerald-100 px-2 py-0.5 rounded-full">
-                                5% de Desconto
-                            </span>
+                            <span class="text-[10px] font-black text-emerald-700 bg-emerald-100 px-2 py-0.5 rounded-full">5% de Desconto</span>
                         </div>
                         <div class="flex items-baseline gap-2 pt-0.5">
                             <span id="detalhe-preco-pix" class="text-3xl font-black text-emerald-700">R$ 0,00</span>
@@ -360,7 +253,6 @@
                         </p>
                     </div>
 
-                    <!-- Parcelamento em até 12x -->
                     <div class="pt-2 border-t border-gray-200/60 flex items-center gap-3 text-xs text-gray-700">
                         <div class="w-8 h-8 rounded-lg bg-blue-100 text-blue-700 flex items-center justify-center shrink-0">
                             <i class="fa-solid fa-credit-card text-sm"></i>
@@ -372,12 +264,21 @@
                     </div>
                 </div>
 
-                <!-- Botão de Compra -->
-                <button onclick="irParaCarrinho()" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-black py-4 rounded-xl shadow-lg shadow-blue-600/25 hover:shadow-xl transition-all text-sm uppercase tracking-wider flex items-center justify-center gap-2 transform hover:-translate-y-0.5 cursor-pointer">
-                    <i class="fa-solid fa-cart-shopping text-base"></i> Comprar
-                </button>
+                <!-- Disponibilidade na filial escolhida -->
+                <div class="flex items-center justify-between text-xs bg-gray-50 border border-gray-200 rounded-xl px-3 py-2.5">
+                    <span class="text-gray-600 flex items-center gap-1.5"><i class="fa-solid fa-warehouse text-blue-600"></i> <span id="detalhe-filial-nome">Filial</span></span>
+                    <span id="detalhe-estoque-badge" class="text-[10px] font-bold px-2 py-1 rounded bg-emerald-100 text-emerald-800">Em estoque</span>
+                </div>
 
-                <!-- Benefícios / Informações Adicionais -->
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <button type="button" onclick="adicionarProdutoSelecionado(false)" class="bg-white hover:bg-blue-50 text-blue-700 border-2 border-blue-600 font-black py-3.5 rounded-xl transition-all text-xs uppercase tracking-wider flex items-center justify-center gap-2">
+                        <i class="fa-solid fa-cart-plus text-base"></i> Adicionar ao carrinho
+                    </button>
+                    <button type="button" onclick="adicionarProdutoSelecionado(true)" class="bg-blue-600 hover:bg-blue-700 text-white font-black py-3.5 rounded-xl shadow-lg shadow-blue-600/25 hover:shadow-xl transition-all text-xs uppercase tracking-wider flex items-center justify-center gap-2">
+                        <i class="fa-solid fa-bag-shopping text-base"></i> Comprar agora
+                    </button>
+                </div>
+
                 <div class="border-t border-gray-100 pt-4 space-y-2.5 text-xs text-gray-600">
                     <div class="flex items-center gap-2 text-emerald-700 font-medium">
                         <i class="fa-solid fa-store text-emerald-600"></i>
@@ -385,169 +286,131 @@
                     </div>
                     <div class="flex items-center gap-2 text-gray-500">
                         <i class="fa-solid fa-shield-halved text-blue-600"></i>
-                        <span>Compra 100% protegida e segura</span>
+                        <span>Compra protegida e segura</span>
                     </div>
                 </div>
-
             </div>
         </section>
 
 
-        <!-- ============================================================== -->
-        <!-- ABA 2.5: ETAPA DO CARRINHO & CHECKOUT (SELEÇÃO FILIAL E CARTÃO)-->
-        <!-- ============================================================== -->
-        <section id="aba-carrinho" class="hidden transition-all duration-300 space-y-6">
-            
+        <!-- ===================== CARRINHO E FINALIZAÇÃO ===================== -->
+        <section id="aba-carrinho" class="hidden space-y-6">
             <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
-                <button onclick="mudarAba('detalhe')" class="text-xs font-bold text-blue-600 hover:text-blue-800 flex items-center gap-1.5 transition-colors">
-                    <i class="fa-solid fa-chevron-left text-[10px]"></i> Voltar para o produto
+                <button type="button" onclick="irParaVitrine()" class="text-xs font-bold text-blue-600 hover:text-blue-800 flex items-center gap-1.5 transition-colors">
+                    <i class="fa-solid fa-chevron-left text-[10px]"></i> Continuar comprando
                 </button>
                 <div class="flex items-center gap-2 text-xs font-semibold text-gray-400">
                     <span class="text-gray-500">1. Vitrine</span>
                     <i class="fa-solid fa-chevron-right text-[9px] text-gray-300"></i>
-                    <span class="text-gray-500">2. Produto</span>
+                    <span class="text-blue-600 font-bold bg-blue-50 px-2.5 py-1 rounded-lg border border-blue-200">2. Carrinho e pagamento</span>
                     <i class="fa-solid fa-chevron-right text-[9px] text-gray-300"></i>
-                    <span class="text-blue-600 font-bold bg-blue-50 px-2.5 py-1 rounded-lg border border-blue-200">3. Carrinho & Checkout</span>
-                    <i class="fa-solid fa-chevron-right text-[9px] text-gray-300"></i>
-                    <span class="text-gray-400">4. Retirada</span>
+                    <span class="text-gray-400">3. Retirada</span>
                 </div>
             </div>
 
-            <!-- Conteúdo do Carrinho com Produto -->
             <div id="carrinho-conteudo" class="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
-                
-                <!-- Coluna Esquerda: Itens + Seleção de Filial + Titular + Pagamento -->
                 <div class="lg:col-span-7 space-y-6">
-                    
-                    <!-- 1. Card do Produto no Carrinho -->
+
+                    <!-- Itens do carrinho -->
                     <div class="bg-white border border-gray-200 rounded-2xl p-5 shadow-sm space-y-4">
                         <div class="flex justify-between items-center border-b border-gray-100 pb-3">
                             <h2 class="text-xs font-black text-gray-700 uppercase tracking-wider flex items-center gap-2">
-                                <i class="fa-solid fa-cart-shopping text-blue-600"></i> Produto no Carrinho
+                                <i class="fa-solid fa-cart-shopping text-blue-600"></i> Itens do carrinho
                             </h2>
-                            <span class="text-[10px] bg-blue-50 text-blue-700 font-bold px-2 py-0.5 rounded-full">1 unidade</span>
+                            <button type="button" onclick="limparCarrinho()" class="text-[11px] text-gray-500 hover:text-red-600 font-semibold">Esvaziar carrinho</button>
                         </div>
-
-                        <div class="flex items-center gap-4">
-                            <div class="w-20 h-20 bg-gray-50 rounded-xl p-2 border border-gray-100 flex items-center justify-center shrink-0">
-                                <img id="carrinho-item-img" src="" alt="" class="max-h-full max-w-full object-contain">
-                            </div>
-                            <div class="flex-1 min-w-0">
-                                <span id="carrinho-item-categoria" class="text-[9px] font-black text-blue-600 uppercase tracking-widest bg-blue-50 px-2 py-0.5 rounded">Categoria</span>
-                                <h3 id="carrinho-item-nome" class="font-bold text-sm text-gray-900 mt-1 truncate">Nome Comercial</h3>
-                                <p id="carrinho-item-sku" class="text-[10px] text-gray-400 font-mono mt-0.5">SKU: ---</p>
-                            </div>
-                            <div class="text-right shrink-0">
-                                <span class="text-[10px] text-gray-400 block font-semibold uppercase">Valor</span>
-                                <span id="carrinho-item-preco" class="text-base font-black text-gray-900">R$ 0,00</span>
-                                <span class="text-[10px] text-emerald-600 font-bold block mt-0.5">Frete Grátis</span>
-                            </div>
-                        </div>
+                        <div id="lista-carrinho" class="divide-y divide-gray-100"></div>
                     </div>
 
-                    <!-- 2. Seleção da Filial de Retirada (Transferida da página do produto) -->
+                    <!-- Filial -->
                     <div class="bg-white border border-gray-200 rounded-2xl p-5 shadow-sm space-y-4">
                         <div class="flex justify-between items-center border-b border-gray-100 pb-3">
                             <h2 class="text-xs font-black text-gray-700 uppercase tracking-wider flex items-center gap-2">
-                                <i class="fa-solid fa-shop text-blue-600"></i> Filial Selecionada para Retirada (UC002)
+                                <i class="fa-solid fa-shop text-blue-600"></i> Filial de retirada
                             </h2>
-                            <button onclick="abrirModalLoja()" class="text-xs text-blue-600 hover:text-blue-800 font-bold flex items-center gap-1 transition-colors">
-                                <i class="fa-solid fa-location-dot"></i> Alterar Filial
+                            <button type="button" onclick="abrirModalLoja()" class="text-xs text-blue-600 hover:text-blue-800 font-bold flex items-center gap-1 transition-colors">
+                                <i class="fa-solid fa-location-dot"></i> Alterar filial
                             </button>
                         </div>
-
-                        <div class="bg-blue-50/60 rounded-xl p-4 border border-blue-100 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                        <div class="bg-blue-50/60 rounded-xl p-4 border border-blue-100 flex items-center justify-between gap-3">
                             <div class="flex items-center space-x-3">
-                                <div class="bg-blue-600 text-white p-2.5 rounded-xl text-base shadow-sm">
-                                    <i class="fa-solid fa-warehouse"></i>
-                                </div>
+                                <div class="bg-blue-600 text-white p-2.5 rounded-xl text-base shadow-sm"><i class="fa-solid fa-warehouse"></i></div>
                                 <div>
-                                    <p id="txt-status-loja-nome" class="text-xs font-black text-gray-900">Canoas Centro</p>
-                                    <p id="txt-status-loja-info" class="text-[11px] font-medium text-emerald-600 mt-0.5">Consultando estoque...</p>
+                                    <p id="txt-status-loja-nome" class="text-xs font-black text-gray-900">---</p>
+                                    <p id="txt-status-loja-info" class="text-[11px] font-medium text-gray-500 mt-0.5">Conferindo estoque...</p>
                                 </div>
                             </div>
-                            <div class="flex items-center gap-2 self-start sm:self-center">
-                                <span id="badge-estoque-status" class="text-[10px] font-bold px-2.5 py-1 rounded bg-emerald-100 text-emerald-800">Estoque OK</span>
-                                <span class="text-[10px] font-black uppercase text-emerald-700 bg-emerald-100 px-2 py-1 rounded">Retirada Grátis</span>
-                            </div>
+                            <span class="text-[10px] font-black uppercase text-emerald-700 bg-emerald-100 px-2 py-1 rounded">Retirada grátis</span>
                         </div>
                     </div>
 
-                    <!-- 3. Dados do Titular e Terceiro Autorizado -->
+                    <!-- Titular -->
                     <div class="bg-white border border-gray-200 rounded-2xl p-5 shadow-sm space-y-4">
                         <h2 class="text-xs font-black text-gray-700 uppercase tracking-wider flex items-center gap-2 border-b border-gray-100 pb-3">
-                            <i class="fa-solid fa-id-card text-blue-600"></i> Dados do Titular da Compra
+                            <i class="fa-solid fa-id-card text-blue-600"></i> Dados do titular da compra
                         </h2>
                         <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
                             <div>
-                                <label class="text-[10px] font-bold text-gray-500 uppercase block mb-1">Nome Completo</label>
-                                <input type="text" id="chk-nome-cliente" value="Murilo Alves" class="w-full px-3 py-2 border border-gray-300 rounded-xl text-xs focus:outline-none focus:border-blue-600 font-medium">
+                                <label for="chk-nome-cliente" class="text-[10px] font-bold text-gray-500 uppercase block mb-1">Nome completo</label>
+                                <input type="text" id="chk-nome-cliente" autocomplete="name" class="w-full px-3 py-2 border border-gray-300 rounded-xl text-xs focus:outline-none focus:border-blue-600 font-medium">
                             </div>
                             <div>
-                                <label class="text-[10px] font-bold text-gray-500 uppercase block mb-1">CPF (com foto na retirada)</label>
-                                <input type="text" id="chk-cpf-cliente" value="123.456.789-00" class="w-full px-3 py-2 border border-gray-300 rounded-xl text-xs focus:outline-none focus:border-blue-600 font-medium">
+                                <label for="chk-cpf-cliente" class="text-[10px] font-bold text-gray-500 uppercase block mb-1">CPF (apresentar com foto na retirada)</label>
+                                <input type="text" id="chk-cpf-cliente" inputmode="numeric" placeholder="000.000.000-00" class="w-full px-3 py-2 border border-gray-300 rounded-xl text-xs focus:outline-none focus:border-blue-600 font-medium">
                             </div>
                         </div>
 
-                        <!-- Autorização de Terceiro (Fluxo 5.3.5.1) -->
                         <div class="bg-gray-50 p-3.5 rounded-xl border border-gray-200 space-y-2.5 mt-2">
                             <label class="flex items-center space-x-2 cursor-pointer select-none">
                                 <input type="checkbox" id="chk-habilitar-terceiro" onchange="toggleCamposTerceiro()" class="w-4 h-4 text-blue-600 rounded">
-                                <span class="text-xs font-bold text-gray-800">
-                                    Outra pessoa irá retirar este pedido na loja? (Fluxo 5.3.5.1)
-                                </span>
+                                <span class="text-xs font-bold text-gray-800">Outra pessoa vai retirar este pedido na loja?</span>
                             </label>
                             <div id="box-terceiro" class="hidden grid grid-cols-1 sm:grid-cols-2 gap-3 pt-2 border-t border-gray-200">
                                 <div>
-                                    <label class="text-[10px] font-bold text-gray-500 uppercase block mb-1">Nome do Terceiro Autorizado</label>
-                                    <input type="text" id="chk-nome-terceiro" placeholder="Nome de quem vai retirar" value="João Vitor G. Valli" class="w-full px-3 py-2 border border-gray-300 rounded-xl text-xs focus:outline-none focus:border-blue-600 font-medium">
+                                    <label for="chk-nome-terceiro" class="text-[10px] font-bold text-gray-500 uppercase block mb-1">Nome de quem vai retirar</label>
+                                    <input type="text" id="chk-nome-terceiro" class="w-full px-3 py-2 border border-gray-300 rounded-xl text-xs focus:outline-none focus:border-blue-600 font-medium">
                                 </div>
                                 <div>
-                                    <label class="text-[10px] font-bold text-gray-500 uppercase block mb-1">CPF do Terceiro Autorizado</label>
-                                    <input type="text" id="chk-cpf-terceiro" placeholder="000.000.000-00" value="987.654.321-11" class="w-full px-3 py-2 border border-gray-300 rounded-xl text-xs focus:outline-none focus:border-blue-600 font-medium">
+                                    <label for="chk-cpf-terceiro" class="text-[10px] font-bold text-gray-500 uppercase block mb-1">CPF de quem vai retirar</label>
+                                    <input type="text" id="chk-cpf-terceiro" inputmode="numeric" placeholder="000.000.000-00" class="w-full px-3 py-2 border border-gray-300 rounded-xl text-xs focus:outline-none focus:border-blue-600 font-medium">
                                 </div>
                             </div>
                         </div>
                     </div>
 
-                    <!-- 4. Checkout com Cartão (Transferido da página do produto) -->
+                    <!-- Pagamento -->
                     <div class="bg-white border border-gray-200 rounded-2xl p-5 shadow-sm space-y-4">
                         <div class="flex justify-between items-center border-b border-gray-100 pb-3">
                             <h2 class="text-xs font-black text-gray-700 uppercase tracking-wider flex items-center gap-2">
-                                <i class="fa-solid fa-credit-card text-blue-600"></i> Pagamento com Cartão (RF003 / HTTPS)
+                                <i class="fa-solid fa-credit-card text-blue-600"></i> Pagamento com cartão
                             </h2>
-                            <span class="text-[9px] text-emerald-700 font-bold bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200">Ambiente Seguro SSL</span>
+                            <span class="text-[9px] text-emerald-700 font-bold bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200">Ambiente seguro</span>
                         </div>
-
                         <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
                             <div class="sm:col-span-2">
-                                <label class="text-[10px] font-bold text-gray-500 uppercase block mb-1">Número do Cartão</label>
-                                <input type="text" id="chk-cartao-numero" value="4532 8900 1234 5678" class="w-full px-3 py-2 border border-gray-300 rounded-xl text-xs focus:outline-none focus:border-blue-600 font-mono">
+                                <label for="chk-cartao-numero" class="text-[10px] font-bold text-gray-500 uppercase block mb-1">Número do cartão</label>
+                                <input type="text" id="chk-cartao-numero" inputmode="numeric" autocomplete="cc-number" value="4532 8900 1234 5678" class="w-full px-3 py-2 border border-gray-300 rounded-xl text-xs focus:outline-none focus:border-blue-600 font-mono">
                             </div>
                             <div>
-                                <label class="text-[10px] font-bold text-gray-500 uppercase block mb-1">CVV</label>
-                                <input type="text" id="chk-cartao-cvv" value="888" maxlength="4" class="w-full px-3 py-2 border border-gray-300 rounded-xl text-xs focus:outline-none focus:border-blue-600 font-mono">
+                                <label for="chk-cartao-cvv" class="text-[10px] font-bold text-gray-500 uppercase block mb-1">CVV</label>
+                                <input type="text" id="chk-cartao-cvv" inputmode="numeric" autocomplete="cc-csc" value="888" maxlength="4" class="w-full px-3 py-2 border border-gray-300 rounded-xl text-xs focus:outline-none focus:border-blue-600 font-mono">
                             </div>
                         </div>
-
-                        <!-- Simulação do Fluxo Alternativo 5.1.5.2 -->
                         <label class="flex items-center space-x-2 cursor-pointer pt-1 text-[11px] text-red-700 select-none">
                             <input type="checkbox" id="chk-simular-recusa" class="w-3.5 h-3.5 text-red-600 rounded">
-                            <span class="font-bold">Testar Fluxo Alternativo 5.1.5.2: Simular recusa financeira da operadora</span>
+                            <span class="font-bold">Demonstração: simular recusa do cartão pela operadora</span>
                         </label>
                     </div>
-
                 </div>
 
-                <!-- Coluna Direita: Resumo Financeiro e Confirmação -->
-                <div class="lg:col-span-5 bg-white border border-gray-200 rounded-2xl p-6 shadow-sm space-y-5 sticky top-24">
+                <!-- Resumo -->
+                <div class="lg:col-span-5 bg-white border border-gray-200 rounded-2xl p-6 shadow-sm space-y-5 lg:sticky lg:top-40">
                     <h2 class="text-xs font-black text-gray-900 uppercase tracking-wider border-b border-gray-100 pb-3 flex items-center gap-2">
-                        <i class="fa-solid fa-receipt text-blue-600"></i> Resumo do Pedido
+                        <i class="fa-solid fa-receipt text-blue-600"></i> Resumo do pedido
                     </h2>
-
                     <div class="space-y-3 text-xs">
                         <div class="flex justify-between text-gray-600">
-                            <span>Subtotal (1 item)</span>
+                            <span id="carrinho-resumo-itens">Subtotal (0 itens)</span>
                             <span id="carrinho-resumo-subtotal" class="font-bold text-gray-900">R$ 0,00</span>
                         </div>
                         <div class="flex justify-between text-gray-600">
@@ -555,579 +418,216 @@
                             <span class="font-black text-emerald-600">Grátis (R$ 0,00)</span>
                         </div>
                         <div class="border-t border-gray-200 pt-3 flex justify-between items-baseline">
-                            <span class="font-bold text-sm text-gray-800">Total a Pagar</span>
+                            <span class="font-bold text-sm text-gray-800">Total a pagar</span>
                             <span id="carrinho-resumo-total" class="text-2xl font-black text-slate-950">R$ 0,00</span>
                         </div>
                     </div>
 
-                    <!-- Detalhes de Pagamento: Pix ou Parcelamento -->
                     <div class="bg-gradient-to-br from-emerald-50/70 to-blue-50/40 border border-emerald-200/60 rounded-xl p-3.5 space-y-1.5 text-xs">
                         <div class="flex justify-between items-center text-emerald-800 font-bold">
                             <span class="flex items-center gap-1.5"><i class="fa-brands fa-pix text-emerald-600"></i> À vista no Pix (5% OFF):</span>
                             <span id="carrinho-resumo-pix" class="text-sm font-black text-emerald-700">R$ 0,00</span>
                         </div>
-                        <p class="text-[11px] text-gray-600 pt-1 border-t border-emerald-100/60" id="carrinho-resumo-parcelas">
-                            ou em até 12x de R$ 0,00 sem juros no cartão
-                        </p>
+                        <p class="text-[11px] text-gray-600 pt-1 border-t border-emerald-100/60" id="carrinho-resumo-parcelas">ou em até 12x sem juros no cartão</p>
                     </div>
 
-                    <!-- Botão Finalizar Compra UC003 -->
-                    <button onclick="executarCheckoutUC003()" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-3.5 rounded-xl shadow-lg shadow-blue-600/20 hover:shadow-xl transition-all text-xs uppercase tracking-wider flex items-center justify-center gap-2 transform hover:-translate-y-0.5 cursor-pointer">
-                        <i class="fa-solid fa-lock mr-1"></i> Confirmar Pedido & Reservar Estoque (UC003)
+                    <button type="button" id="btn-finalizar" onclick="finalizarCompra()" class="w-full bg-blue-600 hover:bg-blue-700 disabled:opacity-60 disabled:cursor-not-allowed text-white font-bold py-3.5 rounded-xl shadow-lg shadow-blue-600/20 hover:shadow-xl transition-all text-xs uppercase tracking-wider flex items-center justify-center gap-2">
+                        <i class="fa-solid fa-lock mr-1"></i> Finalizar compra e reservar estoque
                     </button>
 
                     <div class="text-[10px] text-gray-400 text-center space-y-1 pt-1">
-                        <p><i class="fa-solid fa-shield-halved text-emerald-600 mr-1"></i> Transação criptografada com certificado SSL seguro</p>
-                        <p>Retirada imediata no balcão após separação física</p>
+                        <p><i class="fa-solid fa-shield-halved text-emerald-600 mr-1"></i> Transação protegida</p>
+                        <p>Você recebe um QR Code para cada item quando a loja terminar a separação.</p>
                     </div>
                 </div>
-
             </div>
 
-            <!-- Carrinho Vazio -->
+            <!-- Carrinho vazio -->
             <div id="carrinho-vazio" class="hidden text-center py-16 bg-white rounded-2xl border border-gray-200 text-gray-400 font-medium text-xs">
                 <i class="fa-solid fa-cart-shopping text-4xl block mb-3 text-gray-300"></i>
                 <p class="text-sm font-bold text-gray-700">Seu carrinho está vazio</p>
-                <p class="text-xs text-gray-500 mt-1">Nenhum produto foi selecionado ainda. Escolha um produto na vitrine para comprar.</p>
-                <button onclick="mudarAba('vitrine')" class="mt-4 bg-blue-600 hover:bg-blue-700 text-white font-bold px-4 py-2 rounded-xl text-xs transition-colors inline-flex items-center gap-1.5 shadow-sm">
-                    <i class="fa-solid fa-arrow-left text-[10px]"></i> Ver Vitrine de Produtos
+                <p class="text-xs text-gray-500 mt-1">Adicione produtos na vitrine para comprar e retirar na filial.</p>
+                <button type="button" onclick="irParaVitrine()" class="mt-4 bg-blue-600 hover:bg-blue-700 text-white font-bold px-4 py-2 rounded-xl text-xs transition-colors inline-flex items-center gap-1.5 shadow-sm">
+                    <i class="fa-solid fa-arrow-left text-[10px]"></i> Ver vitrine de produtos
                 </button>
             </div>
-
         </section>
 
 
-        <!-- ============================================================== -->
-        <!-- ABA 3: COMPROVANTE, ESTEIRA E VOUCHER DIGITAL DO CLIENTE       -->
-        <!-- ============================================================== -->
-        <section id="aba-sucesso" class="hidden max-w-lg mx-auto transition-all duration-300">
-            <div class="bg-white rounded-2xl shadow-xl border border-gray-200 overflow-hidden">
-                
-                <div class="bg-blue-700 text-white text-center p-6" id="header-sucesso">
-                    <div class="w-12 h-12 bg-white/20 rounded-full flex items-center justify-center mx-auto text-xl mb-2 shadow-inner">
-                        <i class="fa-solid fa-receipt"></i>
-                    </div>
-                    <h2 class="text-base font-black uppercase tracking-wide">Comprovante de Compra (UC003)</h2>
-                    <p class="text-xs text-blue-100 font-mono mt-0.5" id="txt-sucesso-id">ID: #ML-0000</p>
-                </div>
-
-                <div class="p-6 space-y-6">
-                    
-                    <!-- Status do Pedido na Esteira do G2 -->
-                    <div class="text-center">
-                        <span class="text-[10px] font-black text-gray-400 uppercase tracking-widest block mb-2">Status do Pedido na Filial</span>
-                        <div class="flex justify-center">
-                            <span id="badge-status-cliente" class="bg-amber-50 text-amber-800 text-xs font-bold px-3 py-1.5 rounded-full border border-amber-200 flex items-center gap-2">
-                                <span class="w-2 h-2 rounded-full bg-amber-500 animate-pulse"></span>
-                                <span id="txt-status-cliente">Aguardando Separação</span>
-                            </span>
-                        </div>
-                        <p class="text-xs text-gray-500 mt-2 px-4" id="txt-instrucao-cliente">
-                            A ordem de coleta física foi recebida pela retaguarda da filial.
-                        </p>
-                    </div>
-
-                    <!-- Resumo dos Dados da Transação -->
-                    <div class="bg-gray-50 rounded-xl p-4 border border-gray-200 text-xs space-y-2">
-                        <div class="flex justify-between">
-                            <span class="text-gray-500">Filial de Retirada:</span>
-                            <span class="font-bold text-gray-800" id="resumo-filial">---</span>
-                        </div>
-                        <div class="flex justify-between">
-                            <span class="text-gray-500">Produto:</span>
-                            <span class="font-bold text-gray-800" id="resumo-produto">---</span>
-                        </div>
-                        <div class="flex justify-between">
-                            <span class="text-gray-500">Titular da Compra:</span>
-                            <span class="font-bold text-gray-800" id="resumo-titular">---</span>
-                        </div>
-                        <div class="flex justify-between" id="linha-resumo-terceiro">
-                            <span class="text-gray-500">Terceiro Autorizado:</span>
-                            <span class="font-bold text-blue-700" id="resumo-terceiro">Não informado</span>
-                        </div>
-                        <div class="flex justify-between border-t border-gray-200 pt-2">
-                            <span class="text-gray-500">Frete Aplicado:</span>
-                            <span class="font-bold text-emerald-600">R$ 0,00 (Grátis)</span>
-                        </div>
-                    </div>
-
-                    <!-- Voucher / QR Code Único de Retirada (UC006 / RNF003) -->
-                    <div id="wrapper-qrcode" class="bg-gray-50 border border-dashed border-gray-300 rounded-xl p-5 flex flex-col items-center justify-center space-y-3 relative transition-all">
-                        <span class="text-[10px] font-black text-gray-500 uppercase tracking-wider">
-                            Voucher Digital de Retirada (UC006 / RNF003)
-                        </span>
-                        
-                        <div class="w-36 h-36 bg-white border border-gray-200 p-2 relative flex items-center justify-center rounded-xl shadow-inner">
-                            <img id="img-qrcode" src="" alt="QR Code" class="w-full h-full object-contain">
-                            <div id="overlay-qr" class="absolute inset-0 bg-slate-950/90 flex flex-col items-center justify-center p-3 text-center text-white rounded-xl">
-                                <i class="fa-solid fa-lock text-sm text-yellow-400 mb-1.5"></i>
-                                <p class="text-[10px] leading-tight text-slate-300 font-semibold">
-                                    Bloqueado até a separação física pelo operador da loja.
-                                </p>
-                            </div>
-                        </div>
-
-                        <div id="txt-token-numerico" class="text-xs font-mono bg-white px-3 py-1 rounded-lg border border-gray-300 text-gray-500 font-bold tracking-widest shadow-sm">
-                            XXXX-XXXX
-                        </div>
-                    </div>
-
-                    <div class="flex justify-between items-center pt-2">
-                        <button onclick="mudarAba('vitrine')" class="text-xs text-gray-600 hover:text-blue-600 font-bold transition-colors">
-                            <i class="fa-solid fa-chevron-left text-[10px] mr-1"></i> Voltar à Loja
-                        </button>
-                        <button onclick="navegarPara('/operador')" class="text-xs text-amber-600 hover:text-amber-800 font-bold transition-colors flex items-center gap-1" title="Apenas colaboradores autorizados">
-                            <i class="fa-solid fa-dolly text-xs"></i> Ir para Retaguarda / Balcão <i class="fa-solid fa-arrow-right text-[10px]"></i>
-                        </button>
-                    </div>
-
-                </div>
-            </div>
-        </section>
-
-
-        <!-- ============================================================== -->
-        <!-- ABA LOGIN OPERADOR / ADMIN (CONTROLE DE ACESSO REST RITO)       -->
-        <!-- ============================================================== -->
-        <section id="aba-login-operador" class="hidden max-w-md mx-auto my-6 transition-all duration-300">
-            <div class="bg-white rounded-2xl shadow-2xl border border-slate-200 overflow-hidden">
-                <div class="bg-slate-900 text-white p-6 text-center border-b border-slate-800">
-                    <div class="w-14 h-14 bg-amber-500/20 text-amber-400 rounded-2xl flex items-center justify-center mx-auto text-2xl mb-3 border border-amber-500/30 shadow-inner">
-                        <i class="fa-solid fa-shield-halved"></i>
-                    </div>
-                    <h2 class="text-base font-black uppercase tracking-wider text-white">Acesso Restrito • Balcão & Operador</h2>
-                    <p class="text-xs text-slate-400 mt-1">
-                        Painel de Retaguarda e Validação Presencial (Click & Collect)
-                    </p>
-                    <div class="mt-3 inline-flex items-center gap-1.5 bg-slate-800 text-amber-300 text-[10px] px-3 py-1 rounded-full font-mono border border-slate-700">
-                        <i class="fa-solid fa-lock"></i> Rota Administrativa: <strong class="text-white">/operador</strong>
-                    </div>
-                </div>
-
-                <form onsubmit="realizarLoginOperador(event)" class="p-6 space-y-4 text-xs">
-                    <div>
-                        <label class="font-bold text-gray-700 uppercase text-[10px] block mb-1">Usuário / Matrícula</label>
-                        <div class="relative">
-                            <span class="absolute left-3 top-2.5 text-gray-400"><i class="fa-solid fa-id-badge"></i></span>
-                            <input type="text" id="op-login-user" value="operador" placeholder="Digite seu usuário ou matrícula..." required class="w-full pl-9 pr-3 py-2 border border-gray-300 rounded-xl text-xs focus:outline-none focus:border-amber-500 font-medium">
-                        </div>
-                    </div>
-
-                    <div>
-                        <label class="font-bold text-gray-700 uppercase text-[10px] block mb-1">Senha de Acesso</label>
-                        <div class="relative">
-                            <span class="absolute left-3 top-2.5 text-gray-400"><i class="fa-solid fa-key"></i></span>
-                            <input type="password" id="op-login-pass" value="123456" placeholder="••••••••" required class="w-full pl-9 pr-3 py-2 border border-gray-300 rounded-xl text-xs focus:outline-none focus:border-amber-500 font-medium">
-                        </div>
-                    </div>
-
-                    <div>
-                        <label class="font-bold text-gray-700 uppercase text-[10px] block mb-1">Filial de Trabalho</label>
-                        <select id="op-login-filial" class="w-full border border-gray-300 rounded-xl p-2.5 text-xs bg-gray-50 focus:outline-none focus:border-amber-500 font-medium">
-                            <option value="1">MegaLoja - Filial Canoas Centro</option>
-                            <option value="2">MegaLoja - Filial São Leopoldo Centro</option>
-                        </select>
-                    </div>
-
-                    <div class="pt-2">
-                        <button type="submit" class="w-full bg-slate-900 hover:bg-slate-800 text-amber-400 hover:text-amber-300 font-extrabold py-3 rounded-xl shadow-lg transition-all text-xs uppercase tracking-wider flex items-center justify-center gap-2 border border-slate-700">
-                            <i class="fa-solid fa-right-to-bracket"></i> Acessar Painel do Operador
-                        </button>
-                    </div>
-
-                    <div class="bg-amber-50 border border-amber-200 rounded-xl p-3 text-[11px] text-amber-900 space-y-1">
-                        <p class="font-bold flex items-center gap-1">
-                            <i class="fa-solid fa-circle-info"></i> Autenticação Administrativa:
-                        </p>
-                        <p class="text-amber-800 leading-tight">
-                            Módulo de controle de acesso preparado para futura integração com banco de dados / LDAP / Supabase Auth.
-                            <span class="font-mono font-bold block mt-1">Padrão de teste: operador / 123456</span>
-                        </p>
-                    </div>
-
-                    <div class="text-center pt-2">
-                        <a href="javascript:void(0)" onclick="navegarPara('/cliente')" class="text-blue-600 hover:underline font-bold text-[11px] inline-flex items-center gap-1">
-                            <i class="fa-solid fa-arrow-left"></i> Voltar para a Loja do Cliente
-                        </a>
-                    </div>
-                </form>
-            </div>
-        </section>
-
-
-        <!-- ============================================================== -->
-        <!-- ABA 4: PAINEL DO OPERADOR DA LOJA (UC005, UC007, UC008)         -->
-        <!-- ============================================================== -->
-        <section id="aba-balcao" class="hidden transition-all duration-300 space-y-6">
-            
-            <!-- Barra de Status do Balcão -->
-            <div class="bg-slate-900 text-white rounded-2xl p-6 border border-slate-800 shadow-xl flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+        <!-- ============================ MEUS PEDIDOS ============================ -->
+        <section id="aba-pedidos" class="hidden max-w-3xl mx-auto space-y-5">
+            <div class="flex items-center justify-between">
                 <div>
-                    <h2 class="text-sm font-black text-amber-400 flex items-center gap-2 uppercase tracking-wider">
-                        <i class="fa-solid fa-dolly"></i> Painel de Retaguarda • Click & Collect (Ator 2: Operador)
-                    </h2>
-                    <p class="text-xs text-slate-400 mt-0.5">
-                        Gestão da esteira de separação, conferência de código de barras/SKU e validação de retiradas.
-                    </p>
+                    <h2 id="titulo-pedidos" class="text-lg font-black text-gray-900">Meus pedidos</h2>
+                    <p class="text-xs text-gray-500">Acompanhe a separação e apresente o QR Code na filial para retirar.</p>
                 </div>
-                <div class="flex items-center space-x-2">
-                    <span class="text-xs bg-slate-800 px-3 py-1.5 rounded-lg text-slate-300 border border-slate-700">
-                        Unidade Ativa: <strong class="text-amber-300" id="txt-balcao-loja-nome">Canoas Centro</strong>
-                    </span>
-                    <button onclick="recarregarPedidosBalcao()" class="bg-blue-600 hover:bg-blue-700 text-white p-2 rounded-lg text-xs" title="Atualizar fila">
-                        <i class="fa-solid fa-arrows-rotate"></i>
+                <div class="flex items-center gap-2">
+                    <button type="button" onclick="carregarPedidosCliente(true)" class="bg-white border border-gray-300 hover:bg-gray-50 text-gray-700 text-xs font-bold px-3 py-2 rounded-xl flex items-center gap-1.5" title="Atualizar status">
+                        <i class="fa-solid fa-arrows-rotate"></i> Atualizar
+                    </button>
+                    <button type="button" onclick="irParaVitrine()" class="bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold px-3 py-2 rounded-xl flex items-center gap-1.5">
+                        <i class="fa-solid fa-store"></i> Continuar comprando
                     </button>
                 </div>
             </div>
 
-            <!-- Grid com as 2 Grandes Funções Operacionais do G2 -->
-            <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            <div id="aviso-pedido-novo" class="hidden bg-emerald-50 border border-emerald-200 text-emerald-900 rounded-xl px-4 py-3 text-xs flex items-start gap-2">
+                <i class="fa-solid fa-circle-check text-emerald-600 mt-0.5"></i>
+                <span id="texto-pedido-novo"></span>
+            </div>
 
-                <!-- CARD A: UC005 - SEPARAÇÃO DE PEDIDOS (COM SKU E RUPTURA UC008) -->
-                <div class="bg-white border border-gray-200 rounded-2xl p-6 shadow-sm space-y-5">
-                    <div class="flex justify-between items-center border-b border-gray-100 pb-3">
-                        <div>
-                            <h3 class="text-sm font-black text-gray-900 uppercase tracking-tight flex items-center gap-2">
-                                <span class="bg-blue-100 text-blue-700 w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold">1</span>
-                                UC005 • Separação de Pedidos (RF005)
-                            </h3>
-                            <p class="text-[11px] text-gray-500">Coleta física, conferência de código de barras/SKU e embalagem.</p>
-                        </div>
-                        <span id="badge-contador-separacao" class="bg-amber-100 text-amber-800 text-[10px] font-bold px-2 py-0.5 rounded-full">0 pendentes</span>
-                    </div>
+            <div id="lista-pedidos" class="space-y-4"></div>
 
-                    <!-- Lista / Seleção de Pedido Pendente -->
-                    <div>
-                        <label class="text-[10px] font-black text-gray-400 uppercase block mb-1">Selecione o Pedido para Coleta</label>
-                        <select id="select-pedido-separacao" onchange="selecionarPedidoParaSeparar()" class="w-full border border-gray-300 rounded-xl p-2.5 text-xs bg-gray-50 focus:outline-none focus:border-blue-600 font-medium">
-                            <option value="">Nenhum pedido aguardando separação</option>
-                        </select>
-                    </div>
-
-                    <!-- Ficha de Coleta do Produto -->
-                    <div id="box-detalhe-separacao" class="bg-gray-50 p-4 rounded-xl border border-gray-200 text-xs space-y-2">
-                        <div class="flex justify-between items-start">
-                            <div>
-                                <span class="text-gray-500 text-[10px] uppercase font-bold">Item Solicitado:</span>
-                                <p class="font-bold text-gray-900" id="sep-prod-nome">Selecione um pedido acima</p>
-                            </div>
-                            <span class="bg-blue-100 text-blue-700 font-mono font-bold px-2 py-0.5 rounded text-[11px]" id="sep-prod-qtd">1 un.</span>
-                        </div>
-                        <div class="grid grid-cols-2 gap-2 pt-2 border-t border-gray-200 text-[11px] font-mono">
-                            <div>
-                                <span class="text-gray-400 block text-[9px] uppercase">SKU do Produto:</span>
-                                <strong id="sep-prod-sku" class="text-gray-700">---</strong>
-                            </div>
-                            <div>
-                                <span class="text-gray-400 block text-[9px] uppercase">Código de Barras:</span>
-                                <strong id="sep-prod-barcode" class="text-gray-700">---</strong>
-                            </div>
-                        </div>
-                    </div>
-
-                    <!-- Campo de Leitura / Bipagem de Código de Barras ou SKU (Fluxo 5.2.4 e 5.2.5.2) -->
-                    <div class="space-y-2">
-                        <label class="text-[10px] font-black text-gray-500 uppercase tracking-wider block">
-                            Leitura do Coletor de Dados / Digitação de SKU (RNF005 / Fluxo 5.2.5.2):
-                        </label>
-                        <div class="flex gap-2">
-                            <input type="text" id="input-leitor-sku" placeholder="Aproxime o leitor óptico ou digite o SKU..." class="flex-1 px-3 py-2 border border-gray-300 rounded-xl text-xs font-mono focus:outline-none focus:border-blue-600">
-                            <button onclick="preencherSkuTeste()" class="bg-gray-200 hover:bg-gray-300 text-gray-700 px-3 py-2 rounded-xl text-xs font-bold" title="Preenche o SKU correto para agilizar testes">
-                                <i class="fa-solid fa-barcode"></i> Bipar
-                            </button>
-                        </div>
-                    </div>
-
-                    <!-- Botão de Conclusão da Separação -->
-                    <button onclick="executarSeparacaoUC005()" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 rounded-xl shadow text-xs uppercase tracking-wider flex items-center justify-center gap-2 transition-all">
-                        <i class="fa-solid fa-box-check"></i> Concluir Embalagem & Liberar Voucher (UC005)
-                    </button>
-
-                    <!-- Ponto de Extensão: Ruptura de Estoque (UC008 / Fluxo 5.2.5.1) -->
-                    <div class="bg-red-50 p-3.5 rounded-xl border border-red-200 space-y-2">
-                        <div class="flex items-center justify-between">
-                            <span class="text-xs font-bold text-red-700 flex items-center gap-1.5">
-                                <i class="fa-solid fa-triangle-exclamation"></i> UC008 • Ruptura de Estoque (Falta de Item)
-                            </span>
-                        </div>
-                        <p class="text-[11px] text-red-600 leading-tight">
-                            Se o item não estiver na prateleira física, acione a ruptura para cancelar o pedido e disparar estorno automático à operadora.
-                        </p>
-                        <button onclick="executarRupturaUC008()" class="w-full bg-red-600 hover:bg-red-700 text-white font-bold py-2 rounded-lg text-xs uppercase tracking-wider transition-colors flex items-center justify-center gap-1.5">
-                            <i class="fa-solid fa-ban"></i> Registrar Indisponibilidade (UC008)
-                        </button>
-                    </div>
-                </div>
-
-
-                <!-- CARD B: UC007 - VALIDAÇÃO PRESENCIAL DA RETIRADA -->
-                <div class="bg-white border border-gray-200 rounded-2xl p-6 shadow-sm space-y-5">
-                    <div class="flex justify-between items-center border-b border-gray-100 pb-3">
-                        <div>
-                            <h3 class="text-sm font-black text-gray-900 uppercase tracking-tight flex items-center gap-2">
-                                <span class="bg-emerald-100 text-emerald-700 w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold">2</span>
-                                UC007 • Validação Presencial (RF007)
-                            </h3>
-                            <p class="text-[11px] text-gray-500">Conferência de identidade (titular ou terceiro) e baixa final.</p>
-                        </div>
-                        <span id="badge-contador-prontos" class="bg-emerald-100 text-emerald-800 text-[10px] font-bold px-2 py-0.5 rounded-full">0 prontos</span>
-                    </div>
-
-                    <!-- Busca por Voucher ou Busca Manual de Contingência (Fluxo 5.3.5.2) -->
-                    <div class="space-y-3">
-                        <div>
-                            <label class="text-[10px] font-black text-gray-500 uppercase block mb-1">
-                                Escanear Voucher / QR Code do Cliente:
-                            </label>
-                            <div class="flex gap-2">
-                                <input type="text" id="input-busca-voucher" placeholder="Ex: HV-0001-XXXX-XXXX" class="flex-1 px-3 py-2 border border-gray-300 rounded-xl text-xs font-mono focus:outline-none focus:border-emerald-600">
-                                <button onclick="localizarPedidoRetirada('voucher')" class="bg-emerald-600 hover:bg-emerald-700 text-white px-3.5 py-2 rounded-xl text-xs font-bold transition-colors">
-                                    <i class="fa-solid fa-magnifying-glass mr-1"></i> Buscar
-                                </button>
-                            </div>
-                        </div>
-
-                        <!-- Busca Manual Alternativa (Fluxo 5.3.5.2) -->
-                        <div class="pt-2 border-t border-gray-100">
-                            <label class="text-[10px] font-black text-gray-400 uppercase block mb-1">
-                                Contingência: Busca Manual por CPF (Fluxo 5.3.5.2):
-                            </label>
-                            <div class="flex gap-2">
-                                <input type="text" id="input-busca-cpf" placeholder="CPF do titular ou terceiro..." class="flex-1 px-3 py-2 border border-gray-300 rounded-xl text-xs focus:outline-none focus:border-blue-600">
-                                <button onclick="localizarPedidoRetirada('cpf')" class="bg-gray-800 hover:bg-gray-900 text-white px-3 py-2 rounded-xl text-xs font-bold transition-colors">
-                                    Buscar Manual
-                                </button>
-                            </div>
-                        </div>
-                    </div>
-
-                    <!-- Ficha de Conferência do Recebedor (Fluxo 5.3.4 passo 4 & 5.3.5.1) -->
-                    <div id="box-conferencia-entrega" class="bg-gray-50 p-4 rounded-xl border border-gray-200 text-xs space-y-2.5">
-                        <span class="text-[10px] font-black text-gray-400 uppercase block">Dados para Conferência de Documento</span>
-                        
-                        <div class="space-y-1">
-                            <p class="font-bold text-gray-900" id="ret-pedido-id">Nenhum pedido localizado</p>
-                            <p class="text-gray-600 text-[11px]" id="ret-titular-dados">Titular: ---</p>
-                        </div>
-
-                        <!-- Alerta de Terceiro Autorizado (Fluxo 5.3.5.1) -->
-                        <div id="alerta-terceiro-balcao" class="hidden bg-blue-50 border border-blue-200 p-2.5 rounded-lg text-blue-900 text-[11px]">
-                            <strong class="flex items-center gap-1 text-blue-700"><i class="fa-solid fa-user-check"></i> Retirada por Terceiro Autorizado:</strong>
-                            <p id="ret-terceiro-dados" class="mt-0.5">Nome e CPF autorizados...</p>
-                        </div>
-
-                        <!-- Checkbox Obrigatório de Conferência Física -->
-                        <label class="flex items-center space-x-2 pt-2 border-t border-gray-200 cursor-pointer select-none">
-                            <input type="checkbox" id="chk-doc-conferido" class="w-4 h-4 text-emerald-600 rounded">
-                            <span class="text-[11px] font-bold text-gray-800">
-                                Documento físico oficial (CPF e foto) conferido presencialmente no balcão.
-                            </span>
-                        </label>
-                    </div>
-
-                    <!-- Botão de Baixa Final Presencial -->
-                    <button onclick="executarBaixaUC007()" class="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-3 rounded-xl shadow text-xs uppercase tracking-wider flex items-center justify-center gap-2 transition-all">
-                        <i class="fa-solid fa-handshake"></i> Validar Retirada & Confirmar Entrega (UC007)
-                    </button>
-
-                    <!-- Simulação de Regra de Abandono de 7 dias -->
-                    <div class="pt-2 border-t border-gray-100 flex justify-between items-center text-[11px] text-gray-500">
-                        <span>Regra de Abandono (7 dias sem retirada):</span>
-                        <button onclick="simularAbandonoPedido()" class="text-red-600 hover:underline font-bold">
-                            Expirar Pedido & Devolver Estoque
-                        </button>
-                    </div>
-                </div>
-
+            <div id="pedidos-vazio" class="hidden text-center py-14 bg-white rounded-2xl border border-gray-200 text-gray-400 text-xs">
+                <i class="fa-solid fa-receipt text-4xl block mb-3 text-gray-300"></i>
+                <p class="text-sm font-bold text-gray-700">Nenhum pedido por aqui ainda</p>
+                <p class="mt-1">Quando você finalizar uma compra, o pedido aparece nesta tela.</p>
             </div>
         </section>
 
     </main>
 
-    <!-- MODAL DE ESCOLHA DE FILIAL (RF001) -->
-    <div id="modal-loja" class="fixed inset-0 bg-slate-950/60 z-50 flex items-center justify-center p-4 hidden opacity-0 transition-all duration-300">
+    <!-- MODAL: FILIAIS -->
+    <div id="modal-loja" class="fixed inset-0 bg-slate-950/60 z-50 flex items-center justify-center p-4 hidden opacity-0 transition-all duration-300" role="dialog" aria-modal="true" aria-labelledby="titulo-modal-loja">
         <div class="bg-white rounded-2xl max-w-sm w-full overflow-hidden shadow-2xl transform scale-95 transition-all duration-300" id="modal-content">
             <div class="bg-blue-900 text-white px-5 py-4 flex justify-between items-center">
-                <h3 class="font-bold text-xs uppercase tracking-wider flex items-center gap-2">
-                    <i class="fa-solid fa-shop text-amber-300"></i> Filiais Disponíveis (RF001)
+                <h3 id="titulo-modal-loja" class="font-bold text-xs uppercase tracking-wider flex items-center gap-2">
+                    <i class="fa-solid fa-shop text-amber-300"></i> Escolha a filial de retirada
                 </h3>
-                <button onclick="fecharModalLoja()" class="text-gray-300 hover:text-white transition-colors">
+                <button type="button" onclick="fecharModalLoja()" class="text-gray-300 hover:text-white transition-colors" aria-label="Fechar">
                     <i class="fa-solid fa-xmark text-lg"></i>
                 </button>
             </div>
-
             <div class="p-5 space-y-4">
                 <div>
-                    <label class="text-[10px] font-black text-gray-400 uppercase block mb-1">Selecione a Região</label>
-                    <select id="seletor-cidade" onchange="renderizarLojasModal()" class="w-full border border-gray-200 rounded-xl p-2.5 text-xs bg-gray-50 focus:outline-none focus:border-blue-500 transition-colors">
-                        <option value="canoas">Canoas (RS)</option>
-                        <option value="sao-leopoldo">São Leopoldo (RS)</option>
-                    </select>
+                    <label for="seletor-cidade" class="text-[10px] font-black text-gray-400 uppercase block mb-1">Cidade</label>
+                    <select id="seletor-cidade" onchange="renderizarLojasModal()" class="w-full border border-gray-200 rounded-xl p-2.5 text-xs bg-gray-50 focus:outline-none focus:border-blue-500 transition-colors"></select>
                 </div>
-
                 <div class="space-y-2 max-h-[220px] overflow-y-auto pr-1" id="box-lista-lojas"></div>
             </div>
-
             <div class="bg-gray-50 px-5 py-3 border-t border-gray-100 flex justify-end space-x-2">
-                <button onclick="fecharModalLoja()" class="px-3 py-1.5 text-xs text-gray-500 font-medium hover:text-gray-700">Cancelar</button>
-                <button onclick="salvarEscolhaLoja()" class="px-4 py-1.5 bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold rounded-lg shadow-sm transition-colors">Confirmar Filial</button>
+                <button type="button" onclick="fecharModalLoja()" class="px-3 py-1.5 text-xs text-gray-500 font-medium hover:text-gray-700">Cancelar</button>
+                <button type="button" onclick="salvarEscolhaLoja()" class="px-4 py-1.5 bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold rounded-lg shadow-sm transition-colors">Confirmar filial</button>
             </div>
         </div>
     </div>
 
-    <!-- MODAL DE AUTENTICAÇÃO DO CLIENTE (LOGIN & SENHA / CADASTRO) -->
-    <div id="modal-auth-cliente" class="fixed inset-0 bg-slate-950/60 z-50 flex items-center justify-center p-4 hidden opacity-0 transition-all duration-300">
+    <!-- MODAL: LOGIN E CADASTRO DO CLIENTE -->
+    <div id="modal-auth-cliente" class="fixed inset-0 bg-slate-950/60 z-50 flex items-center justify-center p-4 hidden opacity-0 transition-all duration-300" role="dialog" aria-modal="true" aria-labelledby="titulo-modal-auth">
         <div class="bg-white rounded-2xl max-w-md w-full overflow-hidden shadow-2xl transform scale-95 transition-all duration-300" id="modal-auth-content">
-            <!-- Header do Modal -->
             <div class="bg-gradient-to-r from-blue-700 to-indigo-700 text-white px-6 py-4 flex justify-between items-center">
                 <div class="flex items-center gap-2.5">
-                    <div class="w-9 h-9 rounded-xl bg-white/10 flex items-center justify-center text-amber-300 text-lg shadow-inner">
-                        <i class="fa-solid fa-circle-user"></i>
-                    </div>
+                    <div class="w-9 h-9 rounded-xl bg-white/10 flex items-center justify-center text-amber-300 text-lg shadow-inner"><i class="fa-solid fa-circle-user"></i></div>
                     <div>
-                        <h3 class="font-extrabold text-sm uppercase tracking-wide">Área do Cliente</h3>
+                        <h3 id="titulo-modal-auth" class="font-extrabold text-sm uppercase tracking-wide">Área do cliente</h3>
                         <p class="text-[10px] text-blue-100">MegaLoja Click & Collect</p>
                     </div>
                 </div>
-                <button onclick="fecharModalAuthCliente()" class="text-blue-200 hover:text-white transition-colors">
+                <button type="button" onclick="fecharModalAuthCliente()" class="text-blue-200 hover:text-white transition-colors" aria-label="Fechar">
                     <i class="fa-solid fa-xmark text-lg"></i>
                 </button>
             </div>
 
-            <!-- Seletor de Abas: Entrar vs Cadastrar -->
             <div class="flex border-b border-gray-200 text-xs font-bold bg-gray-50/70">
-                <button id="tab-auth-login" onclick="alternarTabAuthCliente('login')" class="flex-1 py-3 text-center border-b-2 border-blue-600 text-blue-600 bg-white transition-all flex items-center justify-center gap-1.5">
-                    <i class="fa-solid fa-right-to-bracket"></i> Entrar (Login)
+                <button type="button" id="tab-auth-login" onclick="alternarTabAuthCliente('login')" class="flex-1 py-3 text-center border-b-2 border-blue-600 text-blue-600 bg-white transition-all flex items-center justify-center gap-1.5">
+                    <i class="fa-solid fa-right-to-bracket"></i> Entrar
                 </button>
-                <button id="tab-auth-cadastro" onclick="alternarTabAuthCliente('cadastro')" class="flex-1 py-3 text-center border-b-2 border-transparent text-gray-500 hover:text-gray-800 transition-all flex items-center justify-center gap-1.5">
-                    <i class="fa-solid fa-user-plus"></i> Criar Cadastro
+                <button type="button" id="tab-auth-cadastro" onclick="alternarTabAuthCliente('cadastro')" class="flex-1 py-3 text-center border-b-2 border-transparent text-gray-500 hover:text-gray-800 transition-all flex items-center justify-center gap-1.5">
+                    <i class="fa-solid fa-user-plus"></i> Criar conta
                 </button>
             </div>
 
-            <!-- Conteúdo: Formulário de Login -->
             <form id="form-auth-login" onsubmit="executarLoginCliente(event)" class="p-6 space-y-4">
                 <div>
-                    <label class="text-[10px] font-black text-gray-500 uppercase block mb-1">E-mail ou CPF</label>
-                    <div class="relative">
-                        <span class="absolute left-3 top-2.5 text-gray-400 text-xs"><i class="fa-solid fa-envelope"></i></span>
-                        <input type="text" id="cli-login-usuario" placeholder="seu@email.com ou 123.456.789-00" value="murilo@unilasalle.edu.br" required class="w-full pl-9 pr-3 py-2 border border-gray-300 rounded-xl text-xs focus:outline-none focus:border-blue-600 font-medium">
-                    </div>
+                    <label for="cli-login-email" class="text-[10px] font-black text-gray-500 uppercase block mb-1">E-mail</label>
+                    <input type="email" id="cli-login-email" autocomplete="email" placeholder="seu@email.com" required class="w-full px-3 py-2 border border-gray-300 rounded-xl text-xs focus:outline-none focus:border-blue-600 font-medium">
                 </div>
                 <div>
-                    <div class="flex justify-between items-center mb-1">
-                        <label class="text-[10px] font-black text-gray-500 uppercase">Senha de Acesso</label>
-                        <a href="javascript:void(0)" onclick="triggerToast('Recuperação de Senha', 'Link enviado para o seu e-mail cadastrado.', 'success')" class="text-[10px] text-blue-600 hover:underline font-semibold">Esqueceu a senha?</a>
-                    </div>
-                    <div class="relative">
-                        <span class="absolute left-3 top-2.5 text-gray-400 text-xs"><i class="fa-solid fa-lock"></i></span>
-                        <input type="password" id="cli-login-senha" value="123456" placeholder="••••••••" required class="w-full pl-9 pr-3 py-2 border border-gray-300 rounded-xl text-xs focus:outline-none focus:border-blue-600 font-medium">
-                    </div>
+                    <label for="cli-login-senha" class="text-[10px] font-black text-gray-500 uppercase block mb-1">Senha</label>
+                    <input type="password" id="cli-login-senha" autocomplete="current-password" placeholder="••••••••" required class="w-full px-3 py-2 border border-gray-300 rounded-xl text-xs focus:outline-none focus:border-blue-600 font-medium">
                 </div>
-
-                <div class="flex items-center justify-between text-xs pt-1">
-                    <label class="flex items-center gap-2 cursor-pointer text-gray-600 select-none">
-                        <input type="checkbox" id="chk-lembrar-cliente" checked class="w-3.5 h-3.5 text-blue-600 rounded">
-                        <span class="text-[11px]">Lembrar de mim</span>
-                    </label>
-                    <span class="text-[10px] text-emerald-600 font-bold bg-emerald-50 px-2 py-0.5 rounded border border-emerald-100">Login Seguro</span>
-                </div>
-
-                <button type="submit" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-2.5 rounded-xl shadow-md text-xs uppercase tracking-wider transition-all flex items-center justify-center gap-2">
-                    <i class="fa-solid fa-right-to-bracket"></i> Acessar Minha Conta
+                <p id="erro-auth-login" class="hidden text-[11px] font-semibold text-red-600 bg-red-50 border border-red-200 rounded-lg px-3 py-2" role="alert"></p>
+                <button type="submit" id="btn-auth-login" class="w-full bg-blue-600 hover:bg-blue-700 disabled:opacity-60 text-white font-bold py-2.5 rounded-xl shadow-md text-xs uppercase tracking-wider transition-all flex items-center justify-center gap-2">
+                    <i class="fa-solid fa-right-to-bracket"></i> Acessar minha conta
                 </button>
-
                 <div class="pt-2 text-center border-t border-gray-100">
-                    <p class="text-[11px] text-gray-500">
-                        Não possui uma conta? 
+                    <p class="text-[11px] text-gray-500">Não tem conta?
                         <button type="button" onclick="alternarTabAuthCliente('cadastro')" class="text-blue-600 font-bold hover:underline">Cadastre-se grátis</button>
                     </p>
                 </div>
             </form>
 
-            <!-- Conteúdo: Formulário de Cadastro -->
             <form id="form-auth-cadastro" onsubmit="executarCadastroCliente(event)" class="p-6 space-y-3 hidden">
                 <div>
-                    <label class="text-[10px] font-black text-gray-500 uppercase block mb-1">Nome Completo</label>
-                    <input type="text" id="cli-cad-nome" placeholder="Ex: Murilo Alves" required class="w-full px-3 py-2 border border-gray-300 rounded-xl text-xs focus:outline-none focus:border-blue-600 font-medium">
+                    <label for="cli-cad-nome" class="text-[10px] font-black text-gray-500 uppercase block mb-1">Nome completo</label>
+                    <input type="text" id="cli-cad-nome" autocomplete="name" required class="w-full px-3 py-2 border border-gray-300 rounded-xl text-xs focus:outline-none focus:border-blue-600 font-medium">
                 </div>
                 <div class="grid grid-cols-2 gap-2">
                     <div>
-                        <label class="text-[10px] font-black text-gray-500 uppercase block mb-1">CPF</label>
-                        <input type="text" id="cli-cad-cpf" placeholder="000.000.000-00" required class="w-full px-3 py-2 border border-gray-300 rounded-xl text-xs focus:outline-none focus:border-blue-600 font-medium">
+                        <label for="cli-cad-cpf" class="text-[10px] font-black text-gray-500 uppercase block mb-1">CPF</label>
+                        <input type="text" id="cli-cad-cpf" inputmode="numeric" placeholder="000.000.000-00" required class="w-full px-3 py-2 border border-gray-300 rounded-xl text-xs focus:outline-none focus:border-blue-600 font-medium">
                     </div>
                     <div>
-                        <label class="text-[10px] font-black text-gray-500 uppercase block mb-1">WhatsApp / Telefone</label>
-                        <input type="text" id="cli-cad-telefone" placeholder="(51) 99999-9999" required class="w-full px-3 py-2 border border-gray-300 rounded-xl text-xs focus:outline-none focus:border-blue-600 font-medium">
+                        <label for="cli-cad-telefone" class="text-[10px] font-black text-gray-500 uppercase block mb-1">Telefone</label>
+                        <input type="tel" id="cli-cad-telefone" autocomplete="tel" placeholder="(51) 99999-9999" class="w-full px-3 py-2 border border-gray-300 rounded-xl text-xs focus:outline-none focus:border-blue-600 font-medium">
                     </div>
                 </div>
                 <div>
-                    <label class="text-[10px] font-black text-gray-500 uppercase block mb-1">E-mail</label>
-                    <input type="email" id="cli-cad-email" placeholder="seu@email.com" required class="w-full px-3 py-2 border border-gray-300 rounded-xl text-xs focus:outline-none focus:border-blue-600 font-medium">
+                    <label for="cli-cad-email" class="text-[10px] font-black text-gray-500 uppercase block mb-1">E-mail</label>
+                    <input type="email" id="cli-cad-email" autocomplete="email" placeholder="seu@email.com" required class="w-full px-3 py-2 border border-gray-300 rounded-xl text-xs focus:outline-none focus:border-blue-600 font-medium">
                 </div>
                 <div class="grid grid-cols-2 gap-2">
                     <div>
-                        <label class="text-[10px] font-black text-gray-500 uppercase block mb-1">Senha</label>
-                        <input type="password" id="cli-cad-senha" placeholder="Mínimo 6 caracteres" required class="w-full px-3 py-2 border border-gray-300 rounded-xl text-xs focus:outline-none focus:border-blue-600 font-medium">
+                        <label for="cli-cad-senha" class="text-[10px] font-black text-gray-500 uppercase block mb-1">Senha</label>
+                        <input type="password" id="cli-cad-senha" autocomplete="new-password" placeholder="Mínimo 6 caracteres" required minlength="6" class="w-full px-3 py-2 border border-gray-300 rounded-xl text-xs focus:outline-none focus:border-blue-600 font-medium">
                     </div>
                     <div>
-                        <label class="text-[10px] font-black text-gray-500 uppercase block mb-1">Confirmar Senha</label>
-                        <input type="password" id="cli-cad-senha-conf" placeholder="Repita a senha" required class="w-full px-3 py-2 border border-gray-300 rounded-xl text-xs focus:outline-none focus:border-blue-600 font-medium">
+                        <label for="cli-cad-senha-conf" class="text-[10px] font-black text-gray-500 uppercase block mb-1">Confirmar senha</label>
+                        <input type="password" id="cli-cad-senha-conf" autocomplete="new-password" placeholder="Repita a senha" required class="w-full px-3 py-2 border border-gray-300 rounded-xl text-xs focus:outline-none focus:border-blue-600 font-medium">
                     </div>
                 </div>
-
-                <button type="submit" class="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-2.5 rounded-xl shadow-md text-xs uppercase tracking-wider transition-all flex items-center justify-center gap-2 mt-2">
-                    <i class="fa-solid fa-user-check"></i> Finalizar Cadastro
+                <p id="erro-auth-cadastro" class="hidden text-[11px] font-semibold text-red-600 bg-red-50 border border-red-200 rounded-lg px-3 py-2" role="alert"></p>
+                <button type="submit" id="btn-auth-cadastro" class="w-full bg-emerald-600 hover:bg-emerald-700 disabled:opacity-60 text-white font-bold py-2.5 rounded-xl shadow-md text-xs uppercase tracking-wider transition-all flex items-center justify-center gap-2 mt-2">
+                    <i class="fa-solid fa-user-check"></i> Criar minha conta
                 </button>
-
                 <div class="pt-2 text-center border-t border-gray-100">
-                    <p class="text-[11px] text-gray-500">
-                        Já possui cadastro? 
-                        <button type="button" onclick="alternarTabAuthCliente('login')" class="text-blue-600 font-bold hover:underline">Fazer login</button>
+                    <p class="text-[11px] text-gray-500">Já tem conta?
+                        <button type="button" onclick="alternarTabAuthCliente('login')" class="text-blue-600 font-bold hover:underline">Entrar</button>
                     </p>
                 </div>
             </form>
 
             <div class="bg-gray-50 px-6 py-2.5 border-t border-gray-100 text-center">
-                <span class="text-[10px] text-gray-400">Ambiente Seguro com Proteção de Dados (LGPD)</span>
+                <span class="text-[10px] text-gray-400">Seus dados são tratados conforme a LGPD</span>
             </div>
         </div>
     </div>
 
-    <!-- NOTIFICAÇÃO TOAST FLUTUANTE -->
-    <div id="toast" class="fixed bottom-5 right-5 bg-gray-900 text-white px-4 py-3 rounded-xl shadow-2xl flex items-center space-x-3 translate-y-24 opacity-0 transition-all duration-300 z-50 max-w-sm pointer-events-none">
+    <!-- NOTIFICAÇÃO -->
+    <div id="toast" class="fixed bottom-5 right-5 bg-gray-900 text-white px-4 py-3 rounded-xl shadow-2xl flex items-center space-x-3 translate-y-24 opacity-0 transition-all duration-300 z-50 max-w-sm pointer-events-none" role="status" aria-live="polite">
         <div class="p-1 rounded bg-blue-600 text-white text-xs flex items-center justify-center w-6 h-6" id="toast-icon-bg">
             <i class="fa-solid fa-bell" id="toast-icon"></i>
         </div>
         <div>
-            <p class="font-bold text-xs" id="toast-title">Notificação</p>
-            <p class="text-[11px] text-gray-300 mt-0.5 leading-snug" id="toast-msg">Mensagem operacional.</p>
+            <p class="font-bold text-xs" id="toast-title">Aviso</p>
+            <p class="text-[11px] text-gray-300 mt-0.5 leading-snug" id="toast-msg"></p>
         </div>
     </div>
 
-    <!-- RODAPÉ TÉCNICO -->
     <footer class="bg-white border-t border-gray-200 text-center py-6 text-xs text-gray-500 mt-12 shadow-inner">
         <div class="container mx-auto px-4 space-y-2">
-            <p class="font-bold text-gray-800">MegaLoja Central de Click & Collect • Trabalho G2</p>
-            
-            <!-- Links diretos para as rotas -->
-            <div class="flex items-center justify-center gap-4 text-xs font-semibold py-1">
-                <a href="javascript:void(0)" onclick="navegarPara('/cliente')" class="text-blue-600 hover:underline flex items-center gap-1">
-                    <i class="fa-solid fa-cart-shopping"></i> Rota do Cliente (/cliente)
-                </a>
-                <span class="text-gray-300">•</span>
-                <a href="javascript:void(0)" onclick="navegarPara('/operador')" class="text-amber-600 hover:underline flex items-center gap-1">
-                    <i class="fa-solid fa-dolly"></i> Rota de Operador & Balcão (/operador)
-                </a>
-            </div>
-
+            <p class="font-bold text-gray-800">MegaLoja Click & Collect • Trabalho G2</p>
             <p class="text-[11px] text-gray-500">
-                Metodologia Scrum: Murilo Alves (SM), João Vitor G. Valli (PO), Leonardo Quadros & Guilherme Reis (Dev), Júlia Normando (Testes).
+                Scrum: Murilo Alves (SM), João Vitor G. Valli (PO), Leonardo Quadros &amp; Guilherme Reis (Dev), Júlia Normando (Testes).
             </p>
-            <p class="text-[10px] text-gray-400">Universidade LaSalle — Laboratório de Engenharia de Software</p>
+            <p class="text-[10px] text-gray-400">
+                Universidade LaSalle — Laboratório de Engenharia de Software ·
+                <a href="/operador" class="text-gray-400 hover:text-gray-600 underline">Acesso de colaboradores</a>
+            </p>
         </div>
     </footer>
 
-    <!-- LÓGICA E INTEGRAÇÃO JAVASCRIPT (CLEAN CODE) -->
-<script src="js/app.js"></script>
+    <script src="js/common.js"></script>
+    <script src="js/app.js"></script>
 </body>
 </html>
