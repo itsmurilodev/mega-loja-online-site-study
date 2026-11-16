@@ -70,7 +70,14 @@ const comoGerente = (metodo: string, caminho: string, corpo?: unknown) =>
   chamar(metodo, caminho, corpo, API_TOKEN_GERENTE);
 
 /** Migracao SQL 001 aplicada? (definido no beforeAll) */
+// Lido na coleta (antes dos testes) para o skipIf enxergar o valor.
 let migrado = { orders_extra: false, audit_log: false };
+try {
+  const saude = await (await fetch(`${API_URL}/api/health`)).json();
+  migrado = saude.migracao_001 ?? migrado;
+} catch {
+  // API fora do ar: os testes que dependem dela falham por conta propria.
+}
 const temExtras = () => migrado.orders_extra;
 const temAuditoria = () => migrado.audit_log;
 
@@ -118,8 +125,6 @@ let alvo: Awaited<ReturnType<typeof escolherProdutoComEstoque>>;
 
 beforeAll(async () => {
   alvo = await escolherProdutoComEstoque();
-  const saude = await chamar("GET", "/api/health", undefined, null);
-  migrado = saude.body.migracao_001 ?? migrado;
 });
 
 function pedidoValido(extra: Record<string, unknown> = {}) {
