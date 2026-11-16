@@ -4,7 +4,20 @@
 
 const CHAVE_SESSAO_OP = 'megaloja_op_sessao';
 const CHAVE_FILIAL_OP = 'megaloja_op_filial';
-const PAPEIS_PORTAL = ['operador', 'empresa'];
+const PAPEIS_PORTAL = ['operador', 'gerente', 'empresa'];
+const ROTULOS_PERFIL = {
+    operador: 'Perfil: Operador de balcão',
+    gerente: 'Perfil: Gerente da loja',
+    empresa: 'Perfil: Empresa (gestão)',
+};
+// S3-01: cache da fila e fila de baixas feitas sem conexão (localStorage, por navegador).
+const CHAVE_CACHE_FILA = 'megaloja_op_cache_fila';
+const CHAVE_FILA_OFFLINE = 'megaloja_op_fila_offline';
+
+/** S3-16: só gerente e empresa cancelam pedido ou liberam reservas. */
+function podeCancelar() {
+    return ['gerente', 'empresa'].includes(sessaoOp?.user.role);
+}
 
 let sessaoOp = lerStorage(sessionStorage, CHAVE_SESSAO_OP, null); // { access_token, user }
 let lojas = [];
@@ -16,6 +29,8 @@ let pedidoSeparacao = null;
 let pedidoRetirada = null;
 let produtoEmEdicao = null;
 let timerFila = null;
+let modoOffline = false;
+let sincronizando = false;
 
 const apiFetch = criarApiFetch({
     getToken: () => (sessaoOp ? sessaoOp.access_token : null),
@@ -39,7 +54,10 @@ window.addEventListener('load', async () => {
         if (e.key === 'Enter') concluirSeparacao();
     });
     document.addEventListener('keydown', (e) => {
-        if (e.key === 'Escape') fecharFormularioProduto();
+        if (e.key === 'Escape') {
+            fecharFormularioProduto();
+            fecharHistorico();
+        }
     });
 
     if (!sessaoOp) {
@@ -125,9 +143,10 @@ async function abrirPortal() {
     document.getElementById('tela-portal').classList.remove('hidden');
     document.getElementById('txt-usuario-nome').textContent = user.name;
     document.getElementById('txt-usuario-email').textContent = user.email;
-    document.getElementById('txt-perfil').textContent =
-        user.role === 'empresa' ? 'Perfil: Empresa (gestão)' : 'Perfil: Operador de balcão';
+    document.getElementById('txt-perfil').textContent = ROTULOS_PERFIL[user.role] || 'Perfil: Colaborador';
     document.getElementById('aba-btn-produtos').classList.toggle('hidden', user.role !== 'empresa');
+    document.getElementById('bloco-expirar').classList.toggle('hidden', !podeCancelar());
+    document.getElementById('btn-liberar-reservas').classList.toggle('hidden', !podeCancelar());
 
     try {
         lojas = (await apiFetch('/api/stores')).stores;
@@ -149,9 +168,12 @@ async function abrirPortal() {
     select.value = filialId;
 
     mudarAba('separacao');
+    if (!navigator.onLine) modoOffline = true;
+    atualizarFaixaOffline();
     await recarregarPedidos();
     clearInterval(timerFila);
-    timerFila = setInterval(() => {
+    timerFila = setInterval(async () => {
+        await sincronizarFilaOffline(false);
         if (['separacao', 'retirada', 'pedidos'].includes(abaAtiva)) recarregarPedidos(true);
     }, 30000);
 }
@@ -186,9 +208,17 @@ async function recarregarPedidos(silencioso = false) {
     try {
         const resp = await apiFetch(`/api/orders?store_id=${filialId}`);
         pedidos = resp.orders || [];
+        aplicarFilaLocal();
+        gravarStorage(localStorage, CHAVE_CACHE_FILA, { filialId, pedidos, em: new Date().toISOString() });
+        definirOffline(false);
     } catch (err) {
-        if (!silencioso) triggerToast('Não foi possível carregar os pedidos', err.message, 'warning');
-        return;
+        // Sem status HTTP = sem conexão com o servidor: usa a fila guardada (S3-01).
+        if (err.status === undefined && usarCacheOffline()) {
+            // segue para renderizar com o cache
+        } else {
+            if (!silencioso) triggerToast('Não foi possível carregar os pedidos', err.message, 'warning');
+            return;
+        }
     }
 
     const pendentes = pedidos.filter((p) => ['aguardando_separacao', 'aguardando_preparacao'].includes(p.status));
@@ -197,7 +227,13 @@ async function recarregarPedidos(silencioso = false) {
     document.getElementById('cnt-retirada').textContent = prontos.length;
 
     // Fila de separação: mais antigos primeiro.
-    const fila = [...pendentes].sort((a, b) => a.id - b.id);
+    // S3-22: quem marcou horário de retirada vem primeiro (mais cedo antes); depois os mais antigos.
+    const fila = [...pendentes].sort((a, b) => {
+        if (a.pickup_slot && b.pickup_slot) return a.pickup_slot.localeCompare(b.pickup_slot) || a.id - b.id;
+        if (a.pickup_slot) return -1;
+        if (b.pickup_slot) return 1;
+        return a.id - b.id;
+    });
     const select = document.getElementById('select-pedido-separacao');
     const anterior = pedidoSeparacao?.id;
     select.replaceChildren();
@@ -210,7 +246,7 @@ async function recarregarPedidos(silencioso = false) {
     fila.forEach((p) => {
         const opt = document.createElement('option');
         opt.value = p.id;
-        opt.textContent = `Pedido #${String(p.id).padStart(4, '0')} • ${p.product_name} (${p.quantity} un.)`;
+        opt.textContent = `Pedido #${String(p.id).padStart(4, '0')} • ${p.product_name} (${p.quantity} un.)${p.pickup_slot ? ` • retirada ${formatarSlot(p.pickup_slot)}` : ''}`;
         select.appendChild(opt);
     });
     if (anterior && fila.some((p) => p.id === anterior)) select.value = anterior;
@@ -233,7 +269,10 @@ function renderizarTabelaPedidos() {
             <td class="px-4 py-3">${esc(p.customer_name)}<span class="block text-[10px] text-gray-400 font-mono">${esc(p.customer_cpf || '')}</span></td>
             <td class="px-4 py-3">${p.quantity}x ${esc(p.product_name)}</td>
             <td class="px-4 py-3"><span class="text-[10px] font-bold px-2 py-1 rounded-full border ${st.classe}">${esc(st.rotulo)}</span></td>
-            <td class="px-4 py-3 text-gray-500">${esc(new Date(p.created_at + 'Z').toLocaleString('pt-BR'))}</td>`;
+            <td class="px-4 py-3 text-[11px] text-gray-600">${descreverPrazo(p)}</td>
+            <td class="px-4 py-3 text-gray-500">${esc(new Date(p.created_at + 'Z').toLocaleString('pt-BR'))}</td>
+            <td class="px-4 py-3 text-right"><button type="button" class="text-blue-600 hover:underline font-bold" data-historico>Ver</button></td>`;
+        linha.querySelector('[data-historico]').addEventListener('click', () => abrirHistorico(p));
         corpo.appendChild(linha);
     });
 }
@@ -250,6 +289,13 @@ function selecionarPedidoParaSeparar() {
     document.getElementById('sep-prod-qtd').textContent = p ? `${p.quantity} un.` : '-';
     document.getElementById('sep-prod-sku').textContent = p ? (p.product_sku || '---') : '---';
     document.getElementById('sep-prod-barcode').textContent = p ? (p.product_barcode || '---') : '---';
+    const extra = document.getElementById('sep-info-extra');
+    const partes = [];
+    if (p?.pickup_slot) partes.push(`Retirada marcada para ${formatarSlot(p.pickup_slot)}`);
+    if (p?.origin_store_name) partes.push(`Item vem de ${p.origin_store_name} (previsão ${p.transfer_eta_days} dia(s))`);
+    if (p?.reserved_until) partes.push(`Separar até ${new Date(p.reserved_until + 'Z').toLocaleString('pt-BR')}`);
+    extra.textContent = partes.join(' • ');
+    extra.classList.toggle('hidden', partes.length === 0);
 }
 
 async function concluirSeparacao() {
@@ -271,7 +317,7 @@ async function concluirSeparacao() {
         triggerToast('Separação concluída', 'QR Code liberado para o cliente.', 'success');
         await recarregarPedidos();
     } catch (err) {
-        triggerToast('Conferência não confere', err.message, 'warning');
+        triggerToast(err.status === undefined ? 'Sem conexão' : 'Conferência não confere', mensagemDeErro(err), 'warning');
     }
 }
 
@@ -291,7 +337,7 @@ async function registrarFalta() {
         triggerToast('Falta registrada', 'Pedido cancelado e estorno solicitado ao cartão.', 'warning');
         await recarregarPedidos();
     } catch (err) {
-        triggerToast('Não foi possível registrar', err.message, 'warning');
+        triggerToast('Não foi possível registrar', mensagemDeErro(err), 'warning');
     }
 }
 
@@ -362,14 +408,20 @@ async function darBaixaRetirada() {
         triggerToast('Conferência obrigatória', 'Confira o documento com foto antes de confirmar a entrega.', 'warning');
         return;
     }
+    const corpo = {
+        order_id: pedidoRetirada.id,
+        document_checked: true,
+        is_third_party: Boolean(pedidoRetirada.third_party_name),
+    };
+    // S3-01: sem conexão, a baixa vai para a fila local e segue quando a internet voltar.
+    if (modoOffline) {
+        enfileirarBaixa(corpo);
+        return;
+    }
     try {
         await apiFetch('/api/orders/validate-pickup', {
             method: 'POST',
-            body: JSON.stringify({
-                order_id: pedidoRetirada.id,
-                document_checked: true,
-                is_third_party: Boolean(pedidoRetirada.third_party_name),
-            }),
+            body: JSON.stringify(corpo),
         });
         triggerToast('Entrega concluída', 'Baixa registrada com sucesso.', 'success');
         pedidoRetirada = null;
@@ -378,11 +430,20 @@ async function darBaixaRetirada() {
         document.getElementById('input-busca-cpf').value = '';
         await recarregarPedidos();
     } catch (err) {
+        if (err.status === undefined) {
+            definirOffline(true);
+            enfileirarBaixa(corpo);
+            return;
+        }
         triggerToast('Não foi possível dar baixa', err.message, 'warning');
     }
 }
 
 async function expirarPedido() {
+    if (!podeCancelar()) {
+        triggerToast('Sem permissão', 'Somente gerente ou empresa cancelam pedidos.', 'warning');
+        return;
+    }
     if (!pedidoRetirada) {
         triggerToast('Nada localizado', 'Localize o pedido que expirou.', 'warning');
         return;
@@ -395,7 +456,7 @@ async function expirarPedido() {
         atualizarConferenciaRetirada();
         await recarregarPedidos();
     } catch (err) {
-        triggerToast('Não foi possível expirar', err.message, 'warning');
+        triggerToast('Não foi possível expirar', mensagemDeErro(err), 'warning');
     }
 }
 
@@ -549,3 +610,242 @@ async function salvarProduto(event) {
         botao.disabled = false;
     }
 }
+
+// ---------------------------------------------------------------------------
+// Janela de retirada, prazo de reserva e histórico (S3-22, S3-24, S3-17)
+// ---------------------------------------------------------------------------
+function formatarSlot(slot) {
+    // slot = AAAA-MM-DDTHH:00 (horário de Brasília)
+    return `${slot.slice(8, 10)}/${slot.slice(5, 7)} ${slot.slice(11, 16)}`;
+}
+
+function descreverPrazo(p) {
+    const partes = [];
+    if (p.pickup_slot) partes.push(`<span class="font-bold text-blue-700">Retirada ${esc(formatarSlot(p.pickup_slot))}</span>`);
+    if (p.reserved_until) {
+        const vencida = new Date(p.reserved_until + 'Z').getTime() < Date.now();
+        partes.push(`<span class="${vencida ? 'text-red-600 font-bold' : ''}">${vencida ? 'Reserva vencida' : 'Separar até'} ${esc(new Date(p.reserved_until + 'Z').toLocaleString('pt-BR'))}</span>`);
+    }
+    if (p.origin_store_name) partes.push(`Transferência de ${esc(p.origin_store_name)} (${Number(p.transfer_eta_days)} dia(s))`);
+    return partes.length ? partes.join('<br>') : '—';
+}
+
+async function liberarReservasVencidas() {
+    if (!podeCancelar()) return;
+    if (!confirm('Cancelar os pedidos que a loja não separou no prazo e devolver o estoque?')) return;
+    try {
+        const resp = await apiFetch('/api/orders/expire-overdue', { method: 'POST' });
+        triggerToast(
+            resp.expired.length ? 'Reservas liberadas' : 'Nada a liberar',
+            resp.expired.length
+                ? `${resp.expired.length} pedido(s) vencido(s) cancelado(s); estoque devolvido.`
+                : `Nenhum pedido passou do prazo de ${resp.hours}h.`,
+            resp.expired.length ? 'warning' : 'success'
+        );
+        await recarregarPedidos();
+    } catch (err) {
+        triggerToast('Não foi possível liberar', mensagemDeErro(err), 'warning');
+    }
+}
+
+async function abrirHistorico(pedido) {
+    document.getElementById('titulo-historico').textContent = `Histórico do pedido #${String(pedido.id).padStart(4, '0')}`;
+    const auditoria = document.getElementById('lista-auditoria');
+    const notificacoes = document.getElementById('lista-notificacoes');
+    const aviso = (texto) => Object.assign(document.createElement('li'), { textContent: texto, className: 'text-gray-400' });
+    auditoria.replaceChildren(aviso('Carregando...'));
+    notificacoes.replaceChildren(aviso('Carregando...'));
+    const modal = document.getElementById('modal-historico');
+    modal.classList.remove('hidden');
+    modal.classList.add('flex');
+
+    const [aud, not] = await Promise.allSettled([
+        apiFetch(`/api/orders/${pedido.id}/audit`),
+        apiFetch(`/api/orders/${pedido.id}/notifications`),
+    ]);
+
+    if (aud.status === 'fulfilled') {
+        const linhas = aud.value.audit.slice().reverse().map((a) => {
+            const li = document.createElement('li');
+            li.className = 'border border-gray-200 rounded-lg px-3 py-2';
+            li.innerHTML = `<strong class="text-gray-900">${esc(a.action.replace(/_/g, ' '))}</strong>
+                <span class="text-gray-500"> por ${esc(a.user_email || 'sistema')} (${esc(a.user_role || '-')}) em ${esc(new Date(a.created_at + 'Z').toLocaleString('pt-BR'))}</span>
+                ${a.detail ? `<span class="block text-gray-600 mt-0.5">${esc(a.detail)}</span>` : ''}`;
+            return li;
+        });
+        auditoria.replaceChildren(...(linhas.length ? linhas : [aviso('Nenhuma ação de colaborador registrada ainda.')]));
+    } else {
+        auditoria.replaceChildren(aviso(aud.reason?.status === 503
+            ? 'A auditoria ainda não está ativa no banco (falta rodar a migração 001).'
+            : mensagemDeErro(aud.reason)));
+    }
+
+    if (not.status === 'fulfilled') {
+        const linhas = not.value.notifications.map((n) => {
+            const li = document.createElement('li');
+            li.className = 'border border-gray-100 bg-gray-50 rounded-lg px-3 py-2 text-gray-700';
+            li.textContent = `${new Date(n.created_at + 'Z').toLocaleString('pt-BR')} — ${n.message}`;
+            return li;
+        });
+        notificacoes.replaceChildren(...(linhas.length ? linhas : [aviso('Sem notificações.')]));
+    } else {
+        notificacoes.replaceChildren(aviso(mensagemDeErro(not.reason)));
+    }
+}
+
+function fecharHistorico() {
+    const modal = document.getElementById('modal-historico');
+    modal.classList.add('hidden');
+    modal.classList.remove('flex');
+}
+
+function mensagemDeErro(err) {
+    return err.status === undefined
+        ? 'Sem conexão com o servidor. Esta ação precisa de internet.'
+        : err.message;
+}
+
+// ---------------------------------------------------------------------------
+// S3-01: modo offline do terminal
+// Sem conexão, a fila da filial guardada no último carregamento continua
+// valendo e as baixas de retirada ficam numa fila local; ao voltar a internet
+// elas são enviadas (o servidor ainda confere e impede baixa em duplicidade).
+// ---------------------------------------------------------------------------
+function lerFilaOffline() {
+    const fila = lerStorage(localStorage, CHAVE_FILA_OFFLINE, []);
+    return Array.isArray(fila) ? fila : [];
+}
+
+function gravarFilaOffline(fila) {
+    gravarStorage(localStorage, CHAVE_FILA_OFFLINE, fila.length ? fila : null);
+    atualizarFaixaOffline();
+}
+
+function aplicarFilaLocal() {
+    const baixados = new Set(lerFilaOffline().map((b) => b.order_id));
+    pedidos.forEach((p) => {
+        if (baixados.has(p.id) && p.status === 'pronto_retirada') p.status = 'entregue_cliente';
+    });
+}
+
+function usarCacheOffline() {
+    const cache = lerStorage(localStorage, CHAVE_CACHE_FILA, null);
+    if (!cache || cache.filialId !== filialId || !Array.isArray(cache.pedidos)) return false;
+    pedidos = cache.pedidos;
+    definirOffline(true);
+    return true;
+}
+
+function definirOffline(valor) {
+    const mudou = modoOffline !== valor;
+    modoOffline = valor;
+    atualizarFaixaOffline();
+    if (mudou && !valor) sincronizarFilaOffline(false);
+}
+
+function atualizarFaixaOffline() {
+    const faixa = document.getElementById('faixa-offline');
+    if (!faixa) return;
+    const fila = lerFilaOffline();
+    const cache = lerStorage(localStorage, CHAVE_CACHE_FILA, null);
+    const texto = document.getElementById('txt-offline');
+    const botao = document.getElementById('btn-sincronizar');
+
+    if (modoOffline) {
+        const hora = cache?.em ? new Date(cache.em).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }) : '--:--';
+        texto.textContent = `Sem conexão com o servidor. Mostrando a fila de ${hora} guardada neste aparelho. `
+            + `${fila.length} baixa(s) de retirada aguardando envio. Separação, falta e cancelamento precisam de internet.`;
+    } else if (fila.length > 0) {
+        texto.textContent = `${fila.length} baixa(s) de retirada feitas sem conexão aguardando envio ao servidor.`;
+    }
+    faixa.classList.toggle('hidden', !modoOffline && fila.length === 0);
+    botao.classList.toggle('hidden', fila.length === 0);
+}
+
+function enfileirarBaixa(corpo) {
+    const fila = lerFilaOffline();
+    if (fila.some((b) => b.order_id === corpo.order_id)) {
+        triggerToast('Já registrada', 'Esta baixa já está na fila para envio.', 'warning');
+        return;
+    }
+    fila.push({ ...corpo, queued_at: new Date().toISOString() });
+    gravarFilaOffline(fila);
+    aplicarFilaLocal();
+    renderizarFilaAposBaixa();
+    triggerToast('Baixa guardada (offline)', 'Será enviada ao servidor quando a conexão voltar.', 'warning');
+}
+
+async function renderizarFilaAposBaixa() {
+    pedidoRetirada = null;
+    atualizarConferenciaRetirada();
+    document.getElementById('input-busca-voucher').value = '';
+    document.getElementById('input-busca-cpf').value = '';
+    const prontos = pedidos.filter((p) => p.status === 'pronto_retirada');
+    document.getElementById('cnt-retirada').textContent = prontos.length;
+    renderizarTabelaPedidos();
+}
+
+async function sincronizarFilaOffline(manual) {
+    const fila = lerFilaOffline();
+    if (sincronizando || fila.length === 0) {
+        if (manual && fila.length === 0) triggerToast('Tudo em dia', 'Não há baixas aguardando envio.', 'success');
+        return;
+    }
+    sincronizando = true;
+    let enviadas = 0;
+    const restantes = [];
+    let semConexao = false;
+    const problemas = [];
+
+    for (const baixa of fila) {
+        if (semConexao) {
+            restantes.push(baixa);
+            continue;
+        }
+        try {
+            await apiFetch('/api/orders/validate-pickup', {
+                method: 'POST',
+                body: JSON.stringify({
+                    order_id: baixa.order_id,
+                    document_checked: true,
+                    is_third_party: Boolean(baixa.is_third_party),
+                    queued_at: baixa.queued_at,
+                }),
+            });
+            enviadas += 1;
+        } catch (err) {
+            if (err.status === undefined) {
+                semConexao = true;
+                restantes.push(baixa);
+            } else if (err.status === 409) {
+                // Alguém já deu baixa neste pedido: nada a enviar.
+                enviadas += 1;
+            } else if (err.status === 401 || err.status === 403) {
+                restantes.push(baixa);
+                semConexao = true; // sessão encerrada: mantém a fila para depois do login
+            } else {
+                problemas.push(`Pedido #${baixa.order_id}: ${err.message}`);
+            }
+        }
+    }
+
+    gravarFilaOffline(restantes);
+    sincronizando = false;
+    if (enviadas > 0) triggerToast('Baixas enviadas', `${enviadas} baixa(s) registrada(s) no servidor.`, 'success');
+    if (problemas.length > 0) triggerToast('Baixa não aceita', problemas[0], 'warning');
+    if (semConexao) {
+        if (manual) triggerToast('Ainda sem conexão', 'As baixas continuam guardadas neste aparelho.', 'warning');
+        return;
+    }
+    await recarregarPedidos(true);
+}
+
+window.addEventListener('offline', () => {
+    if (sessaoOp) definirOffline(true);
+});
+window.addEventListener('online', () => {
+    if (sessaoOp) {
+        definirOffline(false);
+        recarregarPedidos(true);
+    }
+});

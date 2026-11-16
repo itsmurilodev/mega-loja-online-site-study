@@ -97,6 +97,14 @@
             </nav>
         </header>
 
+        <!-- S3-01: faixa do modo offline (aparece sem conexão ou com baixas aguardando envio) -->
+        <div id="faixa-offline" class="hidden bg-amber-100 border-b border-amber-300 text-amber-950 text-xs" role="status" aria-live="polite">
+            <div class="container mx-auto px-4 max-w-7xl py-2 flex flex-wrap items-center justify-between gap-2">
+                <p id="txt-offline" class="font-semibold"></p>
+                <button type="button" id="btn-sincronizar" onclick="sincronizarFilaOffline(true)" class="bg-amber-500 hover:bg-amber-600 text-slate-950 font-black px-3 py-1.5 rounded-lg uppercase tracking-wider text-[10px]">Sincronizar agora</button>
+            </div>
+        </div>
+
         <main class="container mx-auto px-4 py-6 flex-grow max-w-7xl">
 
             <!-- ============================ SEPARAÇÃO ============================ -->
@@ -123,6 +131,7 @@
                                 <span class="text-gray-500 text-[10px] uppercase font-bold">Item solicitado</span>
                                 <p class="font-bold text-gray-900" id="sep-prod-nome">---</p>
                                 <p class="text-[11px] text-gray-500 mt-0.5" id="sep-cliente">---</p>
+                                <p class="text-[11px] text-blue-700 font-semibold mt-1 hidden" id="sep-info-extra"></p>
                             </div>
                             <span class="bg-blue-100 text-blue-700 font-mono font-bold px-2 py-0.5 rounded text-[11px]" id="sep-prod-qtd">-</span>
                         </div>
@@ -196,8 +205,8 @@
                         <i class="fa-solid fa-handshake"></i> Confirmar entrega ao cliente
                     </button>
 
-                    <div class="pt-2 border-t border-gray-100 flex flex-wrap justify-between items-center gap-2 text-[11px] text-gray-500">
-                        <span>Pedido não retirado em 7 dias?</span>
+                    <div id="bloco-expirar" class="hidden pt-2 border-t border-gray-100 flex flex-wrap justify-between items-center gap-2 text-[11px] text-gray-500">
+                        <span>Pedido não retirado em 7 dias? (somente gerente/empresa)</span>
                         <button type="button" onclick="expirarPedido()" class="text-red-600 hover:underline font-bold">Expirar pedido e devolver ao estoque</button>
                     </div>
                 </div>
@@ -220,13 +229,14 @@
                             <option value="cancelado_ruptura">Cancelado (em falta)</option>
                             <option value="cancelado_expirado">Expirado</option>
                         </select>
+                        <button type="button" id="btn-liberar-reservas" onclick="liberarReservasVencidas()" class="hidden bg-white border border-gray-300 hover:bg-gray-50 text-gray-700 px-3 py-2.5 rounded-xl text-xs font-bold" title="Cancela pedidos que a loja não separou no prazo e devolve o estoque">Liberar reservas vencidas</button>
                         <button type="button" onclick="recarregarPedidos()" class="bg-white border border-gray-300 hover:bg-gray-50 text-gray-700 p-2.5 rounded-xl text-xs" title="Atualizar" aria-label="Atualizar pedidos"><i class="fa-solid fa-arrows-rotate"></i></button>
                     </div>
                 </div>
                 <div class="bg-white border border-gray-200 rounded-2xl shadow-sm overflow-x-auto">
                     <table class="w-full text-xs text-left">
                         <thead class="bg-gray-50 text-[10px] uppercase text-gray-500">
-                            <tr><th class="px-4 py-3">Pedido</th><th class="px-4 py-3">Cliente</th><th class="px-4 py-3">Item</th><th class="px-4 py-3">Status</th><th class="px-4 py-3">Criado em</th></tr>
+                            <tr><th class="px-4 py-3">Pedido</th><th class="px-4 py-3">Cliente</th><th class="px-4 py-3">Item</th><th class="px-4 py-3">Status</th><th class="px-4 py-3">Retirada / prazo</th><th class="px-4 py-3">Criado em</th><th class="px-4 py-3 text-right">Histórico</th></tr>
                         </thead>
                         <tbody id="tabela-pedidos" class="divide-y divide-gray-100"></tbody>
                     </table>
@@ -311,6 +321,26 @@
                 <button type="submit" id="btn-salvar-produto" class="px-5 py-2 bg-amber-500 hover:bg-amber-600 disabled:opacity-60 text-slate-950 text-xs font-black rounded-xl uppercase tracking-wider">Salvar produto</button>
             </div>
         </form>
+    </div>
+
+    <!-- S3-17: histórico do pedido (ações dos operadores + notificações) -->
+    <div id="modal-historico" class="fixed inset-0 bg-slate-950/60 z-50 hidden items-center justify-center p-4" role="dialog" aria-modal="true" aria-labelledby="titulo-historico">
+        <div class="bg-white rounded-2xl max-w-xl w-full max-h-[88vh] overflow-y-auto shadow-2xl">
+            <div class="bg-slate-900 text-white px-5 py-3 flex justify-between items-center rounded-t-2xl">
+                <h3 id="titulo-historico" class="font-bold text-sm uppercase tracking-wider">Histórico do pedido</h3>
+                <button type="button" onclick="fecharHistorico()" class="text-slate-300 hover:text-white" aria-label="Fechar histórico"><i class="fa-solid fa-xmark"></i></button>
+            </div>
+            <div class="p-5 space-y-4 text-xs">
+                <div>
+                    <h4 class="text-[10px] font-black text-gray-400 uppercase mb-1.5">Ações dos colaboradores (auditoria)</h4>
+                    <ul id="lista-auditoria" class="space-y-1.5"></ul>
+                </div>
+                <div>
+                    <h4 class="text-[10px] font-black text-gray-400 uppercase mb-1.5">Notificações do pedido</h4>
+                    <ul id="lista-notificacoes" class="space-y-1.5"></ul>
+                </div>
+            </div>
+        </div>
     </div>
 
     <div id="toast" class="fixed bottom-5 right-5 bg-gray-900 text-white px-4 py-3 rounded-xl shadow-2xl flex items-center space-x-3 translate-y-24 opacity-0 transition-all duration-300 z-50 max-w-sm pointer-events-none" role="status" aria-live="polite">

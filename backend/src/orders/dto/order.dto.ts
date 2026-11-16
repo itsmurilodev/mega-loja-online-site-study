@@ -48,6 +48,8 @@ export interface ValidatePickupDto {
   cpf?: string;
   is_third_party?: boolean;
   document_checked?: boolean;
+  /** S3-01: quando a baixa foi feita sem conexão no terminal (ISO). */
+  queued_at?: string;
 }
 
 export interface UpdateOrderStatusDto {

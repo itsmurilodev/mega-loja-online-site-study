@@ -1207,6 +1207,7 @@ export class OrdersService {
     const cpfBusca = String(payload.cpf ?? "").trim();
     const isThirdParty = Boolean(payload.is_third_party ?? false);
     const documentChecked = Boolean(payload.document_checked ?? false);
+    const queuedAt = payload.queued_at ? String(payload.queued_at).slice(0, 40) : "";
 
     // O CPF entra num filtro .or() do PostgREST: só aceita digitos, ponto e hifen.
     if (cpfBusca && !/^[0-9.\-]+$/.test(cpfBusca)) {
@@ -1317,7 +1318,8 @@ export class OrdersService {
       actor,
       "baixa_retirada",
       order.id,
-      `Via ${via}; retirou: ${quemRetirou}`
+      `Via ${via}; retirou: ${quemRetirou}` +
+        (queuedAt ? `; baixa feita offline em ${queuedAt}` : "")
     );
 
     return this.findOrder(order.id);

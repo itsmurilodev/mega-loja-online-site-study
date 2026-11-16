@@ -137,21 +137,51 @@ $env:SEED_ROLE="operador"; $env:SEED_NAME="Operador Canoas"
 npm run seed:usuario
 ```
 
-Use `SEED_ROLE="empresa"` para o perfil que cadastra produtos e altera preços. Rodar de novo com o mesmo e-mail atualiza senha e papel.
+Use `SEED_ROLE="gerente"` para o gerente da loja (autoriza cancelamentos) e `SEED_ROLE="empresa"` para o perfil que cadastra produtos e altera preços. Rodar de novo com o mesmo e-mail atualiza senha e papel.
 
 ### Perfis e permissões (S3-07 / S3-14)
 
 | Perfil | Onde entra | O que pode |
 |---|---|---|
 | **Cliente** | Loja (`/`, `/cliente`) | Comprar (com ou sem conta), ver os próprios pedidos e QR Codes |
-| **Operador** | `/operador` | Separar pedidos, registrar item em falta, dar baixa na retirada, expirar pedido, ver a fila da filial |
-| **Empresa** | `/operador` | Tudo do operador + criar produtos, trocar imagem, alterar preço e estoque por filial |
+| **Operador** | `/operador` | Separar pedidos (bipagem), registrar item em falta, dar baixa na retirada, ver a fila e o histórico da filial. **Não cancela pedido** (S3-16) |
+| **Gerente** | `/operador` | Tudo do operador + cancelar/expirar pedido, liberar reservas vencidas e consultar o log de auditoria geral (S3-16 / S3-17) |
+| **Empresa** | `/operador` | Tudo do gerente + criar produtos, trocar imagem, alterar preço e estoque por filial |
 
 O login confere e-mail e senha no **Supabase Auth**; o papel vem de `app_metadata.role` e só muda com a service role key. O servidor recusa com `401` (sem login) ou `403` (papel errado) todos os endpoints do operador e da empresa: o front não decide nada sozinho. Contas de cliente não entram em `/operador` e contas de colaborador não entram na loja.
 
 ### Carrinho (S3-30)
 
 O carrinho fica no navegador (vários itens, quantidade limitada pelo estoque da filial). Ao finalizar, `POST /api/orders/checkout` confere o estoque de **todos** os itens antes de cobrar, cobra uma única vez e cria **um pedido por item**; se algum falhar, devolve o estoque e cancela o que já criou. *Limite conhecido:* a tabela `orders` guarda um produto por pedido; a tabela de itens do pedido (`order_items`) está prevista no card S3-15.
+
+### Migração SQL 001 (janela de retirada, entrega, Pix, transferência e auditoria)
+
+Alguns recursos da Sprint 3 precisam de colunas e de uma tabela novas no Supabase. O backend **funciona sem a migração** (tudo que já existia continua igual) e avisa com `503` nos recursos que dependem dela. Para ligar tudo, abra o **Supabase > SQL Editor**, cole o conteúdo de [`backend/migrations/001_sprint3.sql`](backend/migrations/001_sprint3.sql) e rode. É seguro rodar mais de uma vez. `GET /api/health` mostra `migracao_001` com o que já está ativo.
+
+| Recurso | Cartão | Precisa da migração? |
+|---|---|---|
+| Reserva com prazo e liberação de estoque | S3-24 | Não |
+| Código de confirmação do terceiro | S3-18 | Não |
+| Perfil gerente (operador não cancela) | S3-16 | Não |
+| Aviso do QR como mock | S3-10 | Não |
+| Modo offline do terminal | S3-01 | Não (só front) |
+| Pagamento por Pix e cartão + Pix | S3-23 | Só o Pix (evita reutilizar o mesmo Pix) |
+| Janela de retirada | S3-22 | Sim (`orders.pickup_slot`) |
+| Checkout misto: retirada + entrega | S3-20 | Sim (endereço e frete no pedido) |
+| Transferência entre filiais / CD | S3-25 | Sim (origem no pedido; CD é a loja 99) |
+| Log de auditoria | S3-17 | Sim (tabela `audit_log`) |
+
+### Recursos da Sprint 3 (o que é real e o que é simulado)
+
+- **Reserva com prazo (S3-24):** o pedido pago reserva o item na filial. Se a loja não separar em `RESERVA_HORAS` (padrão 48 h), `POST /api/orders/expire-overdue` (gerente/empresa; botão *Liberar reservas vencidas* no portal) cancela o pedido e **devolve a quantidade ao estoque**. Pedido separado e não retirado expira em 7 dias. Para liberar sozinho a cada abertura da fila, defina `RESERVA_AUTO_EXPIRAR=true` (por padrão fica desligado para não cancelar pedidos antigos de demonstração sem querer).
+- **Terceiro com código (S3-18):** `POST /api/orders/third-party-code` gera um código de 6 dígitos (válido 10 min) para o par titular + terceiro. **O envio por e-mail/SMS é simulado**: não há serviço de e-mail, então o código volta na resposta e a tela o mostra como "código de demonstração". Em produção, defina `CODIGO_TERCEIRO_EM_RESPOSTA=false` e ligue um serviço de e-mail. Sem o código certo, `POST /api/orders` e `/checkout` recusam com `403`.
+- **Pix e meios combinados (S3-23):** `POST /api/payments/pix` gera uma cobrança **simulada** (token assinado que expira em 5 min). Apresentar o token ainda válido no checkout vale como "pago"; Pix expirado é recusado (`402`) e o mesmo Pix não paga dois pedidos. O pagamento pode ser dividido em até dois meios (dois cartões ou cartão + Pix) e a soma precisa bater com o total (`POST /api/orders/quote` informa o total). Nenhuma cobrança real acontece.
+- **Janela de retirada (S3-22):** `GET /api/orders/pickup-slots?store_id=&date=` lista as janelas de 1 h (08h às 20h) com as vagas restantes (limite = `capacity` da filial). O pedido guarda `pickup_slot` e a fila de separação do portal vem ordenada por esse horário.
+- **Checkout misto (S3-20):** cada item do carrinho escolhe *Retirar na loja* ou *Receber em casa*; itens de entrega exigem endereço e têm **frete simulado** fixo (`FRETE_SIMULADO`, R$ 19,90). O balcão só lista pedidos de retirada (`GET /api/orders?include=entrega` mostra todos).
+- **Transferência (S3-25):** quando a filial não tem o item, `GET /api/stores/:id/transfer-options` sugere outras filiais (1 dia útil) e o Centro de Distribuição (3 dias úteis). O pedido guarda `origin_store_id`; o estoque sai da origem e volta para ela se o pedido for cancelado. *Simplificação:* o sistema não bloqueia a separação até o item chegar.
+- **Auditoria (S3-17):** cada separação/bipagem, baixa de retirada, ruptura, cancelamento e alteração de produto grava usuário, perfil, data/hora, pedido e detalhe em `audit_log`. Consulta: `GET /api/orders/:id/audit` (operador, gerente, empresa) e `GET /api/audit` (gerente, empresa). No portal: botão *Ver* em *Pedidos da filial*.
+- **Aviso do QR (S3-10):** ao separar, o pedido recebe uma notificação marcada **[MOCK]**: o envio ao cliente é simulado (não há e-mail nem push). O cliente vê as notificações em *Meus pedidos*.
+- **Modo offline do terminal (S3-01):** o portal guarda a última fila da filial no navegador. Sem conexão, mostra essa fila, deixa localizar pedidos e dar baixa; as baixas ficam numa fila local e são enviadas quando a conexão volta (o servidor ainda impede baixa em duplicidade). Separação, falta e cancelamento exigem conexão.
 
 ---
 
@@ -169,9 +199,12 @@ API_URL=https://study-mega-loja-online-site.vercel.app npm test
 
 Por padrão rodam só as consultas, as recusas e a verificação de proteção (`401` em todos os endpoints do operador e da empresa), que não gravam nada. Os testes que usam endpoints do operador precisam de `API_TOKEN` (o `access_token` devolvido por `POST /api/auth/login` de uma conta operador ou empresa); sem ele são pulados. Variáveis que liberam o resto:
 
-- `API_TOKEN`: token de um operador/empresa, para os testes da fila e do balcão.
-- `CONTRACT_WRITE=1` (exige `API_TOKEN`): fluxos que criam pedidos (compra, separação, retirada, expiração). Deixam pedidos de teste no banco e consomem 1 unidade de estoque.
+- `API_TOKEN`: token de um **operador**, para os testes da fila e do balcão.
+- `API_TOKEN_GERENTE`: token de um gerente (ou da empresa), para cancelar pedidos e liberar reservas.
+- `CONTRACT_WRITE=1` (exige `API_TOKEN` e `API_TOKEN_GERENTE`): fluxos que criam pedidos (compra, separação, retirada, expiração). Deixam pedidos de teste no banco e consomem 1 unidade de estoque.
 - `CONTRACT_DESTRUCTIVE=1` (junto com a anterior): teste de ruptura (UC008), que **zera o estoque** do produto na filial usada. Só em banco descartável.
+
+Os testes dos recursos que dependem da migração SQL 001 são pulados enquanto `GET /api/health` informar `migracao_001: false`.
 
 ## 8. Roteiro da Demo (Apresentação da Sprint)
 
