@@ -5,14 +5,19 @@
  * (local, Preview ou producao). Variaveis:
  *
  *   API_URL                endereco da API (padrao http://127.0.0.1:5000)
- *   CONTRACT_WRITE=1       libera os fluxos que criam pedidos no banco
+ *   API_TOKEN              token de login de um operador ou da empresa (S3-14).
+ *                          Sem ele, os testes que usam endpoints do operador sao
+ *                          pulados e so a protecao (401) e conferida.
+ *   CONTRACT_WRITE=1       libera os fluxos que criam pedidos no banco (exige API_TOKEN)
  *   CONTRACT_DESTRUCTIVE=1 libera o teste de ruptura, que ZERA o estoque do
  *                          produto na filial usada (so em banco descartavel)
  */
 import { beforeAll, describe, expect, it } from "vitest";
 
 const API_URL = (process.env.API_URL ?? "http://127.0.0.1:5000").replace(/\/+$/, "");
-const podeEscrever = process.env.CONTRACT_WRITE === "1";
+const API_TOKEN = process.env.API_TOKEN ?? "";
+const temToken = API_TOKEN.length > 0;
+const podeEscrever = process.env.CONTRACT_WRITE === "1" && temToken;
 const podeDestruir = process.env.CONTRACT_DESTRUCTIVE === "1";
 
 const ID_INEXISTENTE = 99999999;
@@ -25,10 +30,17 @@ interface Resposta {
   body: any;
 }
 
-async function chamar(metodo: string, caminho: string, corpo?: unknown): Promise<Resposta> {
+async function chamar(
+  metodo: string,
+  caminho: string,
+  corpo?: unknown,
+  token: string | null = API_TOKEN || null
+): Promise<Resposta> {
+  const headers: Record<string, string> = { "Content-Type": "application/json" };
+  if (token) headers.Authorization = `Bearer ${token}`;
   const resposta = await fetch(`${API_URL}${caminho}`, {
     method: metodo,
-    headers: { "Content-Type": "application/json" },
+    headers,
     body: corpo === undefined ? undefined : JSON.stringify(corpo),
   });
   const texto = await resposta.text();
@@ -141,7 +153,7 @@ describe("Consultas (somente leitura)", () => {
     }
   });
 
-  it("GET /api/orders lista os pedidos de uma filial (fila do balcao)", async () => {
+  it.skipIf(!temToken)("GET /api/orders lista os pedidos de uma filial (fila do balcao)", async () => {
     const { status, body } = await get(`/api/orders?store_id=${alvo.lojaId}`);
     expect(status).toBe(200);
     expect(Array.isArray(body.orders)).toBe(true);
@@ -211,7 +223,131 @@ describe("UC003 Finalizar Compra: recusas (nao gravam pedido)", () => {
   });
 });
 
-describe("UC007 Validar Retirada: recusas (nao gravam nada)", () => {
+// S3-15: carrinho com varios itens. Todas as recusas acontecem antes de gravar qualquer pedido.
+describe("Carrinho: POST /api/orders/checkout, recusas (nao gravam pedido)", () => {
+  const carrinhoValido = (extra: Record<string, unknown> = {}) => ({
+    customer_name: "Cliente Teste de Contrato",
+    customer_cpf: CPF_TITULAR,
+    delivery_method: "retirar_na_loja",
+    store_id: alvo.lojaId,
+    items: [{ product_id: alvo.produto.id, quantity: 1 }],
+    card_number: "4111 1111 1111 1234",
+    ...extra,
+  });
+
+  it("carrinho vazio responde 400", async () => {
+    esperarErro(await post("/api/orders/checkout", carrinhoValido({ items: [] })), 400);
+  });
+
+  it("item com quantidade zero responde 400", async () => {
+    esperarErro(
+      await post("/api/orders/checkout", carrinhoValido({ items: [{ product_id: alvo.produto.id, quantity: 0 }] })),
+      400
+    );
+  });
+
+  it("retirada na loja sem filial responde 400", async () => {
+    esperarErro(await post("/api/orders/checkout", carrinhoValido({ store_id: undefined })), 400);
+  });
+
+  it("produto inexistente responde 404", async () => {
+    esperarErro(
+      await post("/api/orders/checkout", carrinhoValido({ items: [{ product_id: ID_INEXISTENTE, quantity: 1 }] })),
+      404
+    );
+  });
+
+  it("um item sem estoque barra o carrinho inteiro (409) e a mensagem cita o produto", async () => {
+    const resposta = await post(
+      "/api/orders/checkout",
+      carrinhoValido({
+        items: [
+          { product_id: alvo.produto.id, quantity: 1 },
+          { product_id: alvo.produto.id, quantity: alvo.estoque + 1000 },
+        ],
+      })
+    );
+    esperarErro(resposta, 409);
+    expect(resposta.body.error).toContain(alvo.produto.name);
+  });
+
+  it("pagamento recusado responde 402 sem reservar estoque", async () => {
+    const antes = await consultarEstoque(alvo.lojaId, alvo.produto.id);
+    esperarErro(await post("/api/orders/checkout", carrinhoValido({ simulate_payment_failure: true })), 402);
+    expect(await consultarEstoque(alvo.lojaId, alvo.produto.id)).toBe(antes);
+  });
+});
+
+// S3-14: o servidor, e nao o front, decide quem pode operar a loja.
+describe("Protecao dos endpoints do operador e da empresa (S3-14)", () => {
+  const SEM_TOKEN = null;
+  const TOKEN_INVALIDO = "token.invalido.de-teste";
+
+  const protegidos: [string, string, unknown][] = [
+    ["GET", "/api/orders", undefined],
+    ["GET", "/api/orders/mine", undefined],
+    ["POST", "/api/orders/1/separate", { barcode_or_sku: "X" }],
+    ["POST", "/api/orders/1/rupture", { reason: "teste" }],
+    ["POST", "/api/orders/1/expire", {}],
+    ["POST", "/api/orders/validate-pickup", { pickup_code: "HV-0000-ZZZZ-ZZZZ", document_checked: true }],
+    ["POST", "/api/orders/pickup", { pickup_code: "HV-0000-ZZZZ-ZZZZ", document_checked: true }],
+    ["PATCH", "/api/orders/1/status", { status: "pronto_retirada" }],
+    ["POST", "/api/products", { name: "x", category: "x", price: 1, sku: "X-TESTE" }],
+    ["PATCH", "/api/products/1", { price: 1 }],
+  ];
+
+  for (const [metodo, caminho, corpo] of protegidos) {
+    it(`${metodo} ${caminho} sem login responde 401`, async () => {
+      esperarErro(await chamar(metodo, caminho, corpo, SEM_TOKEN), 401);
+    });
+
+    it(`${metodo} ${caminho} com token invalido responde 401`, async () => {
+      esperarErro(await chamar(metodo, caminho, corpo, TOKEN_INVALIDO), 401);
+    });
+  }
+
+  it("login com senha errada responde 401 e nao entrega token", async () => {
+    const { status, body } = await chamar(
+      "POST",
+      "/api/auth/login",
+      { email: "ninguem@megaloja.invalid", password: "senha-errada", portal: "operador" },
+      SEM_TOKEN
+    );
+    expect(status).toBe(401);
+    expect(body.access_token).toBeUndefined();
+  });
+
+  it("login sem e-mail e senha responde 400", async () => {
+    esperarErro(await chamar("POST", "/api/auth/login", {}, SEM_TOKEN), 400);
+  });
+
+  it("cadastro com senha curta responde 400", async () => {
+    esperarErro(
+      await chamar(
+        "POST",
+        "/api/auth/register",
+        { name: "Teste", email: "teste@megaloja.invalid", cpf: "000.000.000-00", password: "123" },
+        SEM_TOKEN
+      ),
+      400
+    );
+  });
+
+  it("o cliente continua criando pedido sem login de operador", async () => {
+    // Recusa de pagamento prova que a rota passou do guard sem gravar nada.
+    esperarErro(
+      await chamar(
+        "POST",
+        "/api/orders",
+        pedidoValido({ simulate_payment_failure: true }),
+        SEM_TOKEN
+      ),
+      402
+    );
+  });
+});
+
+describe.skipIf(!temToken)("UC007 Validar Retirada: recusas (nao gravam nada)", () => {
   it("voucher desconhecido responde 404", async () => {
     esperarErro(
       await post("/api/orders/validate-pickup", {

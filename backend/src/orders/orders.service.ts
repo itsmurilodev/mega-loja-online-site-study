@@ -703,6 +703,11 @@ export class OrdersService {
     const isThirdParty = Boolean(payload.is_third_party ?? false);
     const documentChecked = Boolean(payload.document_checked ?? false);
 
+    // O CPF entra num filtro .or() do PostgREST: só aceita digitos, ponto e hifen.
+    if (cpfBusca && !/^[0-9.\-]+$/.test(cpfBusca)) {
+      throw new BadRequestException("CPF informado em formato invalido.");
+    }
+
     const supabase = this.supabaseService.client;
     let order: OrderView | null = null;
 

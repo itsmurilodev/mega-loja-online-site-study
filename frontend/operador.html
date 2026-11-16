@@ -1,0 +1,327 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="robots" content="noindex, nofollow">
+    <title>Portal do Colaborador • MegaLoja Click & Collect</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link rel="stylesheet" href="css/styles.css">
+</head>
+<body class="bg-slate-100 text-gray-900 flex flex-col min-h-screen antialiased">
+
+    <!-- ================= TELA DE LOGIN (só colaboradores) ================= -->
+    <main id="tela-login" class="hidden flex-grow flex items-center justify-center p-4 bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900">
+        <div class="bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden">
+            <div class="bg-slate-900 text-white p-6 text-center border-b border-slate-800">
+                <div class="w-14 h-14 bg-amber-500/20 text-amber-400 rounded-2xl flex items-center justify-center mx-auto text-2xl mb-3 border border-amber-500/30">
+                    <i class="fa-solid fa-shield-halved"></i>
+                </div>
+                <h1 class="text-base font-black uppercase tracking-wider">Portal do Colaborador</h1>
+                <p class="text-xs text-slate-400 mt-1">MegaLoja Click & Collect · acesso restrito</p>
+            </div>
+
+            <form id="form-login" class="p-6 space-y-4 text-xs" novalidate>
+                <div>
+                    <label for="op-email" class="font-bold text-gray-700 uppercase text-[10px] block mb-1">E-mail corporativo</label>
+                    <div class="relative">
+                        <span class="absolute left-3 top-2.5 text-gray-400"><i class="fa-solid fa-envelope"></i></span>
+                        <input type="email" id="op-email" autocomplete="username" required placeholder="nome@megaloja.com" class="w-full pl-9 pr-3 py-2.5 border border-gray-300 rounded-xl text-xs focus:outline-none focus:border-amber-500 font-medium">
+                    </div>
+                </div>
+                <div>
+                    <label for="op-senha" class="font-bold text-gray-700 uppercase text-[10px] block mb-1">Senha</label>
+                    <div class="relative">
+                        <span class="absolute left-3 top-2.5 text-gray-400"><i class="fa-solid fa-key"></i></span>
+                        <input type="password" id="op-senha" autocomplete="current-password" required placeholder="••••••••" class="w-full pl-9 pr-3 py-2.5 border border-gray-300 rounded-xl text-xs focus:outline-none focus:border-amber-500 font-medium">
+                    </div>
+                </div>
+                <p id="erro-login" class="hidden text-[11px] font-semibold text-red-600 bg-red-50 border border-red-200 rounded-lg px-3 py-2" role="alert"></p>
+                <button type="submit" id="btn-login" class="w-full bg-slate-900 hover:bg-slate-800 disabled:opacity-60 text-amber-400 hover:text-amber-300 font-extrabold py-3 rounded-xl shadow-lg transition-all text-xs uppercase tracking-wider flex items-center justify-center gap-2 border border-slate-700">
+                    <i class="fa-solid fa-right-to-bracket"></i> Entrar no portal
+                </button>
+                <p class="text-[11px] text-gray-500 text-center leading-snug">
+                    Contas de operador e de empresa são criadas pela administração do sistema.
+                    Esta área não aceita contas de cliente.
+                </p>
+            </form>
+        </div>
+    </main>
+
+    <!-- ========================= PORTAL AUTENTICADO ========================= -->
+    <div id="tela-portal" class="hidden flex flex-col flex-grow">
+
+        <header class="bg-slate-900 text-white shadow-lg sticky top-0 z-40 border-b border-slate-800">
+            <div class="container mx-auto px-4 py-3 flex flex-col md:flex-row justify-between items-center max-w-7xl gap-3">
+                <div class="flex items-center gap-3">
+                    <div class="bg-amber-500 text-slate-950 p-2.5 rounded-xl font-black text-sm flex items-center shadow-lg shadow-amber-500/20">
+                        <i class="fa-solid fa-dolly mr-2 text-base"></i> MEGALOJA
+                    </div>
+                    <div>
+                        <p class="text-xs font-black tracking-tight uppercase">Portal do Colaborador</p>
+                        <p id="txt-perfil" class="text-[10px] text-slate-400">Operador</p>
+                    </div>
+                </div>
+
+                <div class="flex items-center flex-wrap justify-center gap-3">
+                    <label class="flex items-center gap-2 bg-slate-800 border border-slate-700 px-3 py-1.5 rounded-xl text-xs">
+                        <i class="fa-solid fa-shop text-amber-400"></i>
+                        <span class="sr-only">Filial de trabalho</span>
+                        <select id="select-filial" onchange="trocarFilial()" class="bg-transparent text-slate-100 font-bold focus:outline-none text-xs max-w-[220px]"></select>
+                    </label>
+
+                    <div class="flex items-center gap-2 bg-slate-800/90 border border-slate-700 px-3 py-1.5 rounded-xl text-xs">
+                        <div class="w-7 h-7 rounded-full bg-amber-500 text-slate-950 flex items-center justify-center text-xs"><i class="fa-solid fa-user-shield"></i></div>
+                        <div class="leading-tight">
+                            <span id="txt-usuario-nome" class="font-bold text-slate-100 block text-[11px]">---</span>
+                            <span id="txt-usuario-email" class="text-[10px] text-amber-400 block font-mono">---</span>
+                        </div>
+                    </div>
+
+                    <button type="button" onclick="sair()" class="bg-red-500/10 hover:bg-red-500/20 text-red-300 border border-red-500/30 px-3 py-1.5 rounded-xl text-xs font-semibold flex items-center gap-1.5 transition-colors">
+                        <i class="fa-solid fa-lock"></i> Sair
+                    </button>
+                </div>
+            </div>
+
+            <!-- Abas -->
+            <nav class="bg-slate-800 border-t border-slate-700" aria-label="Seções do portal">
+                <div class="container mx-auto px-4 max-w-7xl flex gap-1 overflow-x-auto text-xs font-bold py-1.5" id="nav-abas">
+                    <button type="button" data-aba="separacao" class="aba-btn px-4 py-2 rounded-lg whitespace-nowrap"><i class="fa-solid fa-box-open mr-1.5"></i>Separação <span id="cnt-separacao" class="ml-1 bg-amber-400 text-slate-950 text-[10px] px-1.5 py-0.5 rounded-full">0</span></button>
+                    <button type="button" data-aba="retirada" class="aba-btn px-4 py-2 rounded-lg whitespace-nowrap"><i class="fa-solid fa-handshake mr-1.5"></i>Retirada <span id="cnt-retirada" class="ml-1 bg-emerald-400 text-slate-950 text-[10px] px-1.5 py-0.5 rounded-full">0</span></button>
+                    <button type="button" data-aba="pedidos" class="aba-btn px-4 py-2 rounded-lg whitespace-nowrap"><i class="fa-solid fa-list-check mr-1.5"></i>Pedidos da filial</button>
+                    <button type="button" data-aba="produtos" id="aba-btn-produtos" class="aba-btn hidden px-4 py-2 rounded-lg whitespace-nowrap"><i class="fa-solid fa-tags mr-1.5"></i>Produtos e preços</button>
+                </div>
+            </nav>
+        </header>
+
+        <main class="container mx-auto px-4 py-6 flex-grow max-w-7xl">
+
+            <!-- ============================ SEPARAÇÃO ============================ -->
+            <section id="aba-separacao" class="hidden space-y-5">
+                <div class="flex items-center justify-between">
+                    <div>
+                        <h2 class="text-lg font-black text-gray-900">Separação de pedidos</h2>
+                        <p class="text-xs text-gray-500">Colete o item na prateleira, confira o código e libere o QR Code do cliente.</p>
+                    </div>
+                    <button type="button" onclick="recarregarPedidos()" class="bg-white border border-gray-300 hover:bg-gray-50 text-gray-700 p-2.5 rounded-xl text-xs" title="Atualizar fila" aria-label="Atualizar fila">
+                        <i class="fa-solid fa-arrows-rotate"></i>
+                    </button>
+                </div>
+
+                <div class="bg-white border border-gray-200 rounded-2xl p-6 shadow-sm space-y-5 max-w-3xl">
+                    <div>
+                        <label for="select-pedido-separacao" class="text-[10px] font-black text-gray-400 uppercase block mb-1">Pedido para coleta</label>
+                        <select id="select-pedido-separacao" onchange="selecionarPedidoParaSeparar()" class="w-full border border-gray-300 rounded-xl p-2.5 text-xs bg-gray-50 focus:outline-none focus:border-blue-600 font-medium"></select>
+                    </div>
+
+                    <div class="bg-gray-50 p-4 rounded-xl border border-gray-200 text-xs space-y-2">
+                        <div class="flex justify-between items-start gap-3">
+                            <div>
+                                <span class="text-gray-500 text-[10px] uppercase font-bold">Item solicitado</span>
+                                <p class="font-bold text-gray-900" id="sep-prod-nome">---</p>
+                                <p class="text-[11px] text-gray-500 mt-0.5" id="sep-cliente">---</p>
+                            </div>
+                            <span class="bg-blue-100 text-blue-700 font-mono font-bold px-2 py-0.5 rounded text-[11px]" id="sep-prod-qtd">-</span>
+                        </div>
+                        <div class="grid grid-cols-2 gap-2 pt-2 border-t border-gray-200 text-[11px] font-mono">
+                            <div><span class="text-gray-400 block text-[9px] uppercase">SKU</span><strong id="sep-prod-sku" class="text-gray-700">---</strong></div>
+                            <div><span class="text-gray-400 block text-[9px] uppercase">Código de barras</span><strong id="sep-prod-barcode" class="text-gray-700">---</strong></div>
+                        </div>
+                    </div>
+
+                    <div class="space-y-2">
+                        <label for="input-leitor-sku" class="text-[10px] font-black text-gray-500 uppercase tracking-wider block">Leitor de código de barras ou SKU digitado</label>
+                        <input type="text" id="input-leitor-sku" autocomplete="off" placeholder="Aproxime o leitor ou digite o SKU..." class="w-full px-3 py-2.5 border border-gray-300 rounded-xl text-xs font-mono focus:outline-none focus:border-blue-600">
+                    </div>
+
+                    <button type="button" onclick="concluirSeparacao()" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 rounded-xl shadow text-xs uppercase tracking-wider flex items-center justify-center gap-2 transition-all">
+                        <i class="fa-solid fa-box-check"></i> Concluir embalagem e liberar QR Code
+                    </button>
+
+                    <div class="bg-red-50 p-3.5 rounded-xl border border-red-200 space-y-2">
+                        <span class="text-xs font-bold text-red-700 flex items-center gap-1.5"><i class="fa-solid fa-triangle-exclamation"></i> Item em falta na prateleira?</span>
+                        <p class="text-[11px] text-red-600 leading-tight">Registre a falta para cancelar o pedido, zerar o estoque da filial para este item e solicitar o estorno ao cartão do cliente.</p>
+                        <button type="button" onclick="registrarFalta()" class="w-full bg-red-600 hover:bg-red-700 text-white font-bold py-2 rounded-lg text-xs uppercase tracking-wider transition-colors flex items-center justify-center gap-1.5">
+                            <i class="fa-solid fa-ban"></i> Registrar item em falta
+                        </button>
+                    </div>
+                </div>
+            </section>
+
+            <!-- ============================== RETIRADA ============================== -->
+            <section id="aba-retirada" class="hidden space-y-5">
+                <div>
+                    <h2 class="text-lg font-black text-gray-900">Retirada no balcão</h2>
+                    <p class="text-xs text-gray-500">Localize o pedido pelo QR Code, pelo CPF ou pelo número, confira o documento e dê baixa.</p>
+                </div>
+
+                <div class="bg-white border border-gray-200 rounded-2xl p-6 shadow-sm space-y-5 max-w-3xl">
+                    <div class="space-y-3">
+                        <div>
+                            <label for="input-busca-voucher" class="text-[10px] font-black text-gray-500 uppercase block mb-1">QR Code / voucher do cliente</label>
+                            <div class="flex gap-2">
+                                <input type="text" id="input-busca-voucher" autocomplete="off" placeholder="Ex.: HV-0001-XXXX-XXXX" class="flex-1 px-3 py-2.5 border border-gray-300 rounded-xl text-xs font-mono focus:outline-none focus:border-emerald-600">
+                                <button type="button" onclick="localizarPedidoRetirada('voucher')" class="bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2 rounded-xl text-xs font-bold"><i class="fa-solid fa-magnifying-glass mr-1"></i> Buscar</button>
+                            </div>
+                        </div>
+                        <div class="pt-3 border-t border-gray-100">
+                            <label for="input-busca-cpf" class="text-[10px] font-black text-gray-400 uppercase block mb-1">Sem o QR Code? Busque pelo CPF ou número do pedido</label>
+                            <div class="flex gap-2">
+                                <input type="text" id="input-busca-cpf" autocomplete="off" placeholder="CPF do titular ou de quem retira, ou nº do pedido" class="flex-1 px-3 py-2.5 border border-gray-300 rounded-xl text-xs focus:outline-none focus:border-blue-600">
+                                <button type="button" onclick="localizarPedidoRetirada('manual')" class="bg-gray-800 hover:bg-gray-900 text-white px-4 py-2 rounded-xl text-xs font-bold">Buscar</button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="bg-gray-50 p-4 rounded-xl border border-gray-200 text-xs space-y-2.5">
+                        <span class="text-[10px] font-black text-gray-400 uppercase block">Conferência de documento</span>
+                        <div class="space-y-1">
+                            <p class="font-bold text-gray-900" id="ret-pedido-id">Nenhum pedido localizado</p>
+                            <p class="text-gray-600 text-[11px]" id="ret-titular-dados">Titular: ---</p>
+                        </div>
+                        <div id="alerta-terceiro-balcao" class="hidden bg-blue-50 border border-blue-200 p-2.5 rounded-lg text-blue-900 text-[11px]">
+                            <strong class="flex items-center gap-1 text-blue-700"><i class="fa-solid fa-user-check"></i> Retirada por pessoa autorizada</strong>
+                            <p id="ret-terceiro-dados" class="mt-0.5">---</p>
+                        </div>
+                        <label class="flex items-center space-x-2 pt-2 border-t border-gray-200 cursor-pointer select-none">
+                            <input type="checkbox" id="chk-doc-conferido" class="w-4 h-4 text-emerald-600 rounded">
+                            <span class="text-[11px] font-bold text-gray-800">Conferi o documento oficial com foto de quem está retirando.</span>
+                        </label>
+                    </div>
+
+                    <button type="button" onclick="darBaixaRetirada()" class="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-3 rounded-xl shadow text-xs uppercase tracking-wider flex items-center justify-center gap-2 transition-all">
+                        <i class="fa-solid fa-handshake"></i> Confirmar entrega ao cliente
+                    </button>
+
+                    <div class="pt-2 border-t border-gray-100 flex flex-wrap justify-between items-center gap-2 text-[11px] text-gray-500">
+                        <span>Pedido não retirado em 7 dias?</span>
+                        <button type="button" onclick="expirarPedido()" class="text-red-600 hover:underline font-bold">Expirar pedido e devolver ao estoque</button>
+                    </div>
+                </div>
+            </section>
+
+            <!-- ============================== PEDIDOS ============================== -->
+            <section id="aba-pedidos" class="hidden space-y-4">
+                <div class="flex flex-wrap items-end justify-between gap-3">
+                    <div>
+                        <h2 class="text-lg font-black text-gray-900">Pedidos da filial</h2>
+                        <p class="text-xs text-gray-500">Todos os pedidos da unidade selecionada.</p>
+                    </div>
+                    <div class="flex items-center gap-2">
+                        <label for="filtro-status" class="sr-only">Filtrar por status</label>
+                        <select id="filtro-status" onchange="renderizarTabelaPedidos()" class="border border-gray-300 rounded-xl px-3 py-2 text-xs bg-white focus:outline-none focus:border-blue-600">
+                            <option value="">Todos os status</option>
+                            <option value="aguardando_separacao">Aguardando separação</option>
+                            <option value="pronto_retirada">Pronto para retirada</option>
+                            <option value="entregue_cliente">Entregue</option>
+                            <option value="cancelado_ruptura">Cancelado (em falta)</option>
+                            <option value="cancelado_expirado">Expirado</option>
+                        </select>
+                        <button type="button" onclick="recarregarPedidos()" class="bg-white border border-gray-300 hover:bg-gray-50 text-gray-700 p-2.5 rounded-xl text-xs" title="Atualizar" aria-label="Atualizar pedidos"><i class="fa-solid fa-arrows-rotate"></i></button>
+                    </div>
+                </div>
+                <div class="bg-white border border-gray-200 rounded-2xl shadow-sm overflow-x-auto">
+                    <table class="w-full text-xs text-left">
+                        <thead class="bg-gray-50 text-[10px] uppercase text-gray-500">
+                            <tr><th class="px-4 py-3">Pedido</th><th class="px-4 py-3">Cliente</th><th class="px-4 py-3">Item</th><th class="px-4 py-3">Status</th><th class="px-4 py-3">Criado em</th></tr>
+                        </thead>
+                        <tbody id="tabela-pedidos" class="divide-y divide-gray-100"></tbody>
+                    </table>
+                    <p id="pedidos-vazio" class="hidden text-center text-gray-400 text-xs py-10">Nenhum pedido encontrado.</p>
+                </div>
+            </section>
+
+            <!-- ======================= PRODUTOS E PREÇOS (empresa) ======================= -->
+            <section id="aba-produtos" class="hidden space-y-5">
+                <div class="flex flex-wrap items-end justify-between gap-3">
+                    <div>
+                        <h2 class="text-lg font-black text-gray-900">Produtos e preços</h2>
+                        <p class="text-xs text-gray-500">Cadastre produtos, troque a imagem, altere preços e ajuste o estoque de cada filial.</p>
+                    </div>
+                    <button type="button" onclick="abrirFormularioProduto(null)" class="bg-amber-500 hover:bg-amber-600 text-slate-950 font-black px-4 py-2.5 rounded-xl text-xs uppercase tracking-wider flex items-center gap-2">
+                        <i class="fa-solid fa-plus"></i> Novo produto
+                    </button>
+                </div>
+
+                <div class="bg-white border border-gray-200 rounded-2xl shadow-sm overflow-x-auto">
+                    <table class="w-full text-xs text-left">
+                        <thead class="bg-gray-50 text-[10px] uppercase text-gray-500">
+                            <tr><th class="px-4 py-3">Produto</th><th class="px-4 py-3">Categoria</th><th class="px-4 py-3">SKU</th><th class="px-4 py-3 text-right">Preço</th><th class="px-4 py-3">Estoque por filial</th><th class="px-4 py-3"></th></tr>
+                        </thead>
+                        <tbody id="tabela-produtos" class="divide-y divide-gray-100"></tbody>
+                    </table>
+                </div>
+            </section>
+        </main>
+    </div>
+
+    <!-- MODAL: FORMULÁRIO DE PRODUTO -->
+    <div id="modal-produto" class="fixed inset-0 bg-slate-950/60 z-50 hidden items-center justify-center p-4" role="dialog" aria-modal="true" aria-labelledby="titulo-form-produto">
+        <form id="form-produto" class="bg-white rounded-2xl max-w-2xl w-full max-h-[92vh] overflow-y-auto shadow-2xl" novalidate>
+            <div class="bg-slate-900 text-white px-6 py-4 flex justify-between items-center rounded-t-2xl sticky top-0">
+                <h3 id="titulo-form-produto" class="font-bold text-sm uppercase tracking-wider">Novo produto</h3>
+                <button type="button" onclick="fecharFormularioProduto()" class="text-slate-300 hover:text-white" aria-label="Fechar"><i class="fa-solid fa-xmark text-lg"></i></button>
+            </div>
+            <div class="p-6 space-y-4 text-xs">
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div class="sm:col-span-2">
+                        <label for="prod-nome" class="text-[10px] font-black text-gray-500 uppercase block mb-1">Nome do produto *</label>
+                        <input type="text" id="prod-nome" required class="w-full px-3 py-2 border border-gray-300 rounded-xl focus:outline-none focus:border-amber-500 font-medium">
+                    </div>
+                    <div>
+                        <label for="prod-categoria" class="text-[10px] font-black text-gray-500 uppercase block mb-1">Categoria *</label>
+                        <input type="text" id="prod-categoria" list="lista-categorias" required placeholder="ex.: eletronicos" class="w-full px-3 py-2 border border-gray-300 rounded-xl focus:outline-none focus:border-amber-500 font-medium">
+                        <datalist id="lista-categorias"></datalist>
+                    </div>
+                    <div>
+                        <label for="prod-preco" class="text-[10px] font-black text-gray-500 uppercase block mb-1">Preço (R$) *</label>
+                        <input type="text" id="prod-preco" inputmode="decimal" required placeholder="0,00" class="w-full px-3 py-2 border border-gray-300 rounded-xl focus:outline-none focus:border-amber-500 font-medium">
+                    </div>
+                    <div>
+                        <label for="prod-sku" class="text-[10px] font-black text-gray-500 uppercase block mb-1">SKU (único) *</label>
+                        <input type="text" id="prod-sku" required class="w-full px-3 py-2 border border-gray-300 rounded-xl focus:outline-none focus:border-amber-500 font-mono">
+                    </div>
+                    <div>
+                        <label for="prod-barcode" class="text-[10px] font-black text-gray-500 uppercase block mb-1">Código de barras</label>
+                        <input type="text" id="prod-barcode" inputmode="numeric" class="w-full px-3 py-2 border border-gray-300 rounded-xl focus:outline-none focus:border-amber-500 font-mono">
+                    </div>
+                    <div class="sm:col-span-2">
+                        <label for="prod-imagem" class="text-[10px] font-black text-gray-500 uppercase block mb-1">Link da imagem</label>
+                        <div class="flex gap-3 items-center">
+                            <input type="url" id="prod-imagem" placeholder="https://..." oninput="atualizarPreviaImagem()" class="flex-1 px-3 py-2 border border-gray-300 rounded-xl focus:outline-none focus:border-amber-500">
+                            <div class="w-14 h-14 border border-gray-200 rounded-xl bg-gray-50 flex items-center justify-center overflow-hidden shrink-0">
+                                <img id="prod-imagem-previa" alt="Prévia da imagem" class="max-h-full max-w-full object-contain hidden">
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div>
+                    <span class="text-[10px] font-black text-gray-500 uppercase block mb-2">Estoque por filial</span>
+                    <div id="prod-estoques" class="grid grid-cols-1 sm:grid-cols-2 gap-2"></div>
+                </div>
+
+                <p id="erro-produto" class="hidden text-[11px] font-semibold text-red-600 bg-red-50 border border-red-200 rounded-lg px-3 py-2" role="alert"></p>
+            </div>
+            <div class="bg-gray-50 px-6 py-3 border-t border-gray-100 flex justify-end gap-2 rounded-b-2xl">
+                <button type="button" onclick="fecharFormularioProduto()" class="px-4 py-2 text-xs text-gray-600 font-semibold hover:text-gray-900">Cancelar</button>
+                <button type="submit" id="btn-salvar-produto" class="px-5 py-2 bg-amber-500 hover:bg-amber-600 disabled:opacity-60 text-slate-950 text-xs font-black rounded-xl uppercase tracking-wider">Salvar produto</button>
+            </div>
+        </form>
+    </div>
+
+    <div id="toast" class="fixed bottom-5 right-5 bg-gray-900 text-white px-4 py-3 rounded-xl shadow-2xl flex items-center space-x-3 translate-y-24 opacity-0 transition-all duration-300 z-50 max-w-sm pointer-events-none" role="status" aria-live="polite">
+        <div class="p-1 rounded bg-blue-600 text-white text-xs flex items-center justify-center w-6 h-6" id="toast-icon-bg"><i class="fa-solid fa-bell" id="toast-icon"></i></div>
+        <div>
+            <p class="font-bold text-xs" id="toast-title">Aviso</p>
+            <p class="text-[11px] text-gray-300 mt-0.5 leading-snug" id="toast-msg"></p>
+        </div>
+    </div>
+
+    <script src="js/common.js"></script>
+    <script src="js/operador.js"></script>
+</body>
+</html>
