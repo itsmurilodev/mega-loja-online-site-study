@@ -123,7 +123,35 @@ O servidor NestJS iniciará em `http://127.0.0.1:5000` (ou `https://` caso `HTTP
 ### Passo 3: Acessar a Aplicação
 
 Abra diretamente no navegador:
-- `http://127.0.0.1:5000` (ou a URL HTTPS do ambiente de demo na Vercel).
+- `http://127.0.0.1:5000` ou `/cliente`: **loja do cliente** (vitrine, carrinho, pedidos e conta).
+- `http://127.0.0.1:5000/operador`: **portal do colaborador** (operador e empresa), com login próprio. `/balcao` e `/admin` levam ao mesmo lugar.
+- Na Vercel, as mesmas rotas valem no endereço de demo.
+
+### Passo 4: Criar o primeiro operador e a empresa
+
+O cadastro público da loja só cria contas de **cliente**. Contas de operador e de empresa são criadas pela administração, com a service role key do `.env`. A senha vem só do terminal (nada fica no código):
+
+```powershell
+$env:SEED_EMAIL="operador@megaloja.com"; $env:SEED_PASSWORD="defina-uma-senha"
+$env:SEED_ROLE="operador"; $env:SEED_NAME="Operador Canoas"
+npm run seed:usuario
+```
+
+Use `SEED_ROLE="empresa"` para o perfil que cadastra produtos e altera preços. Rodar de novo com o mesmo e-mail atualiza senha e papel.
+
+### Perfis e permissões (S3-07 / S3-14)
+
+| Perfil | Onde entra | O que pode |
+|---|---|---|
+| **Cliente** | Loja (`/`, `/cliente`) | Comprar (com ou sem conta), ver os próprios pedidos e QR Codes |
+| **Operador** | `/operador` | Separar pedidos, registrar item em falta, dar baixa na retirada, expirar pedido, ver a fila da filial |
+| **Empresa** | `/operador` | Tudo do operador + criar produtos, trocar imagem, alterar preço e estoque por filial |
+
+O login confere e-mail e senha no **Supabase Auth**; o papel vem de `app_metadata.role` e só muda com a service role key. O servidor recusa com `401` (sem login) ou `403` (papel errado) todos os endpoints do operador e da empresa: o front não decide nada sozinho. Contas de cliente não entram em `/operador` e contas de colaborador não entram na loja.
+
+### Carrinho (S3-30)
+
+O carrinho fica no navegador (vários itens, quantidade limitada pelo estoque da filial). Ao finalizar, `POST /api/orders/checkout` confere o estoque de **todos** os itens antes de cobrar, cobra uma única vez e cria **um pedido por item**; se algum falhar, devolve o estoque e cancela o que já criou. *Limite conhecido:* a tabela `orders` guarda um produto por pedido; a tabela de itens do pedido (`order_items`) está prevista no card S3-15.
 
 ---
 
@@ -139,9 +167,10 @@ npm test
 API_URL=https://study-mega-loja-online-site.vercel.app npm test
 ```
 
-Por padrão rodam só as consultas e as recusas, que não gravam nada. Duas variáveis liberam o resto:
+Por padrão rodam só as consultas, as recusas e a verificação de proteção (`401` em todos os endpoints do operador e da empresa), que não gravam nada. Os testes que usam endpoints do operador precisam de `API_TOKEN` (o `access_token` devolvido por `POST /api/auth/login` de uma conta operador ou empresa); sem ele são pulados. Variáveis que liberam o resto:
 
-- `CONTRACT_WRITE=1`: fluxos que criam pedidos (compra, separação, retirada, expiração). Deixam pedidos de teste no banco e consomem 1 unidade de estoque.
+- `API_TOKEN`: token de um operador/empresa, para os testes da fila e do balcão.
+- `CONTRACT_WRITE=1` (exige `API_TOKEN`): fluxos que criam pedidos (compra, separação, retirada, expiração). Deixam pedidos de teste no banco e consomem 1 unidade de estoque.
 - `CONTRACT_DESTRUCTIVE=1` (junto com a anterior): teste de ruptura (UC008), que **zera o estoque** do produto na filial usada. Só em banco descartável.
 
 ## 8. Roteiro da Demo (Apresentação da Sprint)
@@ -158,15 +187,17 @@ Este roteiro guia a demonstração completa da arquitetura **NestJS + TypeScript
    - Alterne a filial no topo (*Canoas Centro*, *Canoas Shopping*, *São Leopoldo Bourbon*) para demonstrar a consulta de estoque por filial em tempo real (`GET /api/stores?product_id=...`).
 
 3. **UC003 - Finalizar Compra e Medição de Reserva de Estoque (RNF001 $\le$ 60s):**
-   - Selecione um produto com estoque na filial ativa e clique em **Retirar na Loja**.
-   - **Teste de Recusa de Cartão (Fluxo 5.1.5.2):** Marque *Simular recusa da Operadora de Cartão* e tente finalizar — a API NestJS retornará erro HTTP `402`.
-   - **Compra Aprovada com Terceiro Autorizado (Fluxo 5.3.5.1):** Desmarque a simulação de recusa, habilite *Retirada por Terceiro Autorizado*, informe nome e CPF do terceiro e clique em **Finalizar Compra**.
+   - Adicione dois ou mais produtos com estoque na filial ativa (**Adicionar ao carrinho** ou **Comprar**), abra o **Carrinho**, altere quantidades e remova um item.
+   - **Teste de Recusa de Cartão (Fluxo 5.1.5.2):** Marque *Demonstração: simular recusa do cartão* e tente finalizar — a API NestJS retornará erro HTTP `402` sem reservar estoque.
+   - **Compra Aprovada com Terceiro Autorizado (Fluxo 5.3.5.1):** Desmarque a simulação de recusa, habilite *Outra pessoa vai retirar este pedido*, informe nome e CPF e clique em **Finalizar compra**. A tela **Meus pedidos** mostra um pedido por item.
    - Consulte `GET /api/metrics/rnf001` para comprovar que tanto `consulta_estoque` quanto `reserva_estoque` responderam muito abaixo do limite de `60000 ms` (60 s), com `compliance_rate_percent: 100`.
 
 4. **UC005 - Separação de Pedido no Balcão (Perfil Operador):**
-   - Alterne para a visão **Balcão / Operador**, selecione o pedido em *UC005 Separação de Pedidos*, clique em **Bipar** para validar o SKU/código de barras e clique em **Concluir Embalagem**.
-   - Retorne à visão **Cliente**: o status mudou para `Pronto para Retirada` e o **QR Code assinado via HMAC (RNF003)** foi liberado.
+   - Abra `/operador` e mostre que sem login só aparece a tela de entrada (e que uma conta de cliente é recusada). Entre com a conta de operador, escolha a filial, selecione o pedido na aba **Separação**, digite ou leia o SKU/código de barras e clique em **Concluir embalagem e liberar QR Code**.
+   - Volte à loja, em **Meus pedidos**: o status mudou para `Pronto para retirada` e o **QR Code assinado via HMAC (RNF003)** foi liberado.
 
 5. **UC007 & UC008 - Validação Presencial da Retirada e Ruptura de Estoque:**
-   - Em *UC007 Validação Presencial*, localize o pedido pelo Voucher ou CPF, marque a conferência do documento físico e confirme a entrega (`entregue_cliente`).
-   - Para demonstrar o ponto de extensão *UC008*, crie um novo pedido e clique em **Registrar Indisponibilidade (UC008)** na esteira de separação: o pedido muda para `cancelado_ruptura`, aciona estorno e zera o estoque da filial no Supabase.
+   - Na aba **Retirada**, localize o pedido pelo QR Code, CPF ou número, marque a conferência do documento físico e confirme a entrega (`entregue_cliente`).
+   - Para demonstrar o ponto de extensão *UC008*, crie um novo pedido e use **Registrar item em falta** na aba Separação: o pedido muda para `cancelado_ruptura`, aciona estorno e zera o estoque da filial no Supabase.
+
+6. **Gestão da empresa (S3-08):** entre em `/operador` com a conta de perfil empresa, abra **Produtos e preços**, cadastre um produto novo (com link de imagem e estoque por filial) e altere o preço de outro; confira na vitrine.
