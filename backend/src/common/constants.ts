@@ -41,6 +41,10 @@ export const SUPABASE_KEY =
   process.env.SUPABASE_KEY ||
   "";
 
+export const SUPABASE_ANON_KEY =
+  process.env.SUPABASE_ANON_KEY || process.env.SUPABASE_KEY || "";
+export const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || "";
+
 export const SECRET_TOKEN_KEY = process.env.SECRET_TOKEN_KEY || "";
 
 // Sprint 3 (RNF002): Configuração de HTTPS em ambiente de demo/produção
@@ -93,6 +97,8 @@ export interface ProductRow {
   sku: string | null;
   barcode: string | null;
   stock?: number;
+  /** Estoque de todas as filiais (id da filial -> quantidade), com include=stock. */
+  stocks?: Record<number, number>;
 }
 
 export interface OrderView {

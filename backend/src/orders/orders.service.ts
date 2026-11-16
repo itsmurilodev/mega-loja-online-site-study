@@ -18,6 +18,7 @@ import { ProductsService } from "../products/products.service";
 import { StoresService } from "../stores/stores.service";
 import { SupabaseService } from "../supabase/supabase.service";
 import {
+  CheckoutDto,
   CreateOrderDto,
   RegisterRupturaDto,
   SeparateOrderDto,
@@ -299,25 +300,53 @@ export class OrdersService {
       simulatePaymentFailure
     );
 
-    const initialStatus = "aguardando_separacao";
-    const timestamp = this.nowIso();
+    return this.placeOrder({
+      customerName,
+      customerCpf,
+      deliveryMethod,
+      storeId,
+      storeName,
+      productId,
+      quantity,
+      cardMasked: pagamento.card_masked,
+      thirdPartyName,
+      thirdPartyCpf,
+    });
+  }
 
+  /**
+   * Grava o pedido, reserva o estoque da filial e registra a notificação.
+   * Usado pelo checkout de um item (createOrder) e pelo carrinho (createCheckout).
+   */
+  private async placeOrder(input: {
+    customerName: string;
+    customerCpf: string;
+    deliveryMethod: string;
+    storeId: number | null;
+    storeName: string;
+    productId: number;
+    quantity: number;
+    cardMasked: string;
+    thirdPartyName: string | null;
+    thirdPartyCpf: string | null;
+  }): Promise<OrderView> {
+    const timestamp = this.nowIso();
     const supabase = this.supabaseService.client;
     const { data: insertedOrder, error: insertErr } = await supabase
       .from("orders")
       .insert({
-        customer_name: customerName,
-        customer_cpf: customerCpf,
-        delivery_method: deliveryMethod,
-        store_id: storeId,
-        product_id: productId,
-        quantity,
-        status: initialStatus,
+        customer_name: input.customerName,
+        customer_cpf: input.customerCpf,
+        delivery_method: input.deliveryMethod,
+        store_id: input.storeId,
+        product_id: input.productId,
+        quantity: input.quantity,
+        status: "aguardando_separacao",
         pickup_code: null,
-        card_number_masked: pagamento.card_masked,
+        card_number_masked: input.cardMasked,
         payment_status: "aprovado",
-        third_party_name: thirdPartyName || null,
-        third_party_cpf: thirdPartyCpf || null,
+        third_party_name: input.thirdPartyName || null,
+        third_party_cpf: input.thirdPartyCpf || null,
         created_at: timestamp,
         updated_at: timestamp,
       })
@@ -332,11 +361,15 @@ export class OrdersService {
 
     const orderId = Number(insertedOrder.id);
 
-    if (deliveryMethod === "retirar_na_loja" && storeId) {
-      await this.storesService.reservarEstoque(storeId, productId, quantity);
+    if (input.deliveryMethod === "retirar_na_loja" && input.storeId) {
+      await this.storesService.reservarEstoque(
+        input.storeId,
+        input.productId,
+        input.quantity
+      );
       await this.createNotification(
         orderId,
-        `Pedido #${orderId} confirmado com frete R$0,00. Aguardando separacao física na filial ${storeName}.`
+        `Pedido #${orderId} confirmado com frete R$0,00. Aguardando separacao física na filial ${input.storeName}.`
       );
     } else {
       await this.createNotification(
@@ -346,6 +379,192 @@ export class OrdersService {
     }
 
     return this.findOrder(orderId);
+  }
+
+  /**
+   * S3-15 - Carrinho com vários itens.
+   * Confere o estoque de TODOS os itens antes de cobrar, cobra uma vez e cria
+   * um pedido por item (o esquema atual guarda um produto por pedido). Se algo
+   * falhar no meio, devolve o estoque e cancela o que já foi criado.
+   */
+  async createCheckout(payload: CheckoutDto): Promise<OrderView[]> {
+    const customerName = String(payload.customer_name ?? "").trim();
+    const customerCpf = String(payload.customer_cpf ?? "").trim();
+    const deliveryMethod = String(
+      payload.delivery_method ?? "retirar_na_loja"
+    ).trim();
+    const storeId =
+      payload.store_id !== undefined && payload.store_id !== null
+        ? Number(payload.store_id)
+        : null;
+
+    if (!customerName) {
+      throw new BadRequestException("Informe o nome do cliente.");
+    }
+    if (!DELIVERY_METHODS.has(deliveryMethod)) {
+      throw new BadRequestException(
+        "delivery_method deve ser 'retirar_na_loja' ou 'entrega_padrao'."
+      );
+    }
+    if (deliveryMethod === "retirar_na_loja" && !storeId) {
+      throw new BadRequestException(
+        "A selecao de filial fisica e obrigatoria para retirada na loja."
+      );
+    }
+    if (!Array.isArray(payload.items) || payload.items.length === 0) {
+      throw new BadRequestException("O carrinho está vazio.");
+    }
+
+    // Junta linhas repetidas do mesmo produto somando as quantidades.
+    const quantities = new Map<number, number>();
+    for (const item of payload.items) {
+      const productId = Number(item?.product_id);
+      const quantity = Number(item?.quantity ?? 1);
+      if (!Number.isInteger(productId) || productId < 1) {
+        throw new BadRequestException("Item do carrinho sem product_id válido.");
+      }
+      if (!Number.isInteger(quantity) || quantity < 1) {
+        throw new BadRequestException("A quantidade deve ser maior que zero.");
+      }
+      quantities.set(productId, (quantities.get(productId) ?? 0) + quantity);
+    }
+
+    let storeName = "Envio Domiciliar";
+    if (deliveryMethod === "retirar_na_loja" && storeId) {
+      const store = await this.storesService.findActiveStoreById(storeId);
+      if (!store) {
+        throw new NotFoundException(
+          "Filial fisica selecionada nao encontrada ou inativa."
+        );
+      }
+      storeName = store.name;
+    }
+
+    // 1) Confere catálogo e estoque de todos os itens antes de cobrar.
+    const problemas: string[] = [];
+    const linhas: { productId: number; quantity: number }[] = [];
+    for (const [productId, quantity] of quantities) {
+      const product = await this.productsService.findProductById(productId);
+      if (!product) {
+        throw new NotFoundException(
+          `Produto ${productId} nao encontrado no catalogo.`
+        );
+      }
+      if (deliveryMethod === "retirar_na_loja" && storeId) {
+        const { disponivel, available } =
+          await this.storesService.consultarDisponibilidade(
+            storeId,
+            productId,
+            quantity
+          );
+        if (!disponivel) {
+          problemas.push(
+            `${product.name} (pedido: ${quantity}, disponível: ${available})`
+          );
+        }
+      }
+      linhas.push({ productId, quantity });
+    }
+    if (problemas.length > 0) {
+      throw new ConflictException(
+        `Item indisponivel na filial '${storeName}': ${problemas.join("; ")}. ` +
+          "Ajuste o carrinho, escolha outra filial ou altere para entrega domiciliar."
+      );
+    }
+
+    // 2) Pagamento único para o carrinho inteiro.
+    const pagamento = this.operadoraCartaoService.processarPagamento(
+      payload.card_number ?? "4111 1111 1111 1234",
+      Boolean(payload.simulate_payment_failure ?? false)
+    );
+
+    const thirdPartyName = payload.third_party_name
+      ? String(payload.third_party_name).trim()
+      : null;
+    const thirdPartyCpf = payload.third_party_cpf
+      ? String(payload.third_party_cpf).trim()
+      : null;
+
+    // 3) Um pedido por item, com desfazimento se algum falhar.
+    const criados: OrderView[] = [];
+    try {
+      for (const linha of linhas) {
+        criados.push(
+          await this.placeOrder({
+            customerName,
+            customerCpf: customerCpf || "000.000.000-00",
+            deliveryMethod,
+            storeId,
+            storeName,
+            productId: linha.productId,
+            quantity: linha.quantity,
+            cardMasked: pagamento.card_masked,
+            thirdPartyName,
+            thirdPartyCpf,
+          })
+        );
+      }
+    } catch (err) {
+      await this.desfazerPedidos(criados, "Falha ao finalizar o carrinho.");
+      throw err;
+    }
+
+    return criados;
+  }
+
+  private async desfazerPedidos(
+    pedidos: OrderView[],
+    motivo: string
+  ): Promise<void> {
+    const supabase = this.supabaseService.client;
+    for (const pedido of pedidos) {
+      try {
+        if (pedido.delivery_method === "retirar_na_loja" && pedido.store_id) {
+          await this.storesService.devolverEstoque(
+            Number(pedido.store_id),
+            pedido.product_id,
+            pedido.quantity
+          );
+        }
+        await supabase
+          .from("orders")
+          .update({
+            status: "cancelado",
+            refund_requested: 1,
+            cancellation_reason: motivo,
+            updated_at: this.nowIso(),
+          })
+          .eq("id", pedido.id);
+      } catch {
+        // Melhor esforço: o erro original é o que importa para o cliente.
+      }
+    }
+  }
+
+  /** Pedidos do cliente logado (pelo CPF do cadastro). */
+  async listOrdersByCpf(cpf: string): Promise<OrderView[]> {
+    const supabase = this.supabaseService.client;
+    const { data, error } = await supabase
+      .from("orders")
+      .select(
+        `
+        id, customer_name, customer_cpf, delivery_method, store_id,
+        product_id, quantity, status, pickup_code, third_party_name,
+        third_party_cpf, refund_requested, cancellation_reason,
+        created_at, updated_at,
+        products (id, name, price, image_url, sku, barcode),
+        stores (id, name, address, city)
+      `
+      )
+      .eq("customer_cpf", cpf)
+      .order("id", { ascending: false });
+
+    if (error) {
+      throw new InternalServerErrorException(
+        `Erro no banco de dados (Supabase): ${error.message}`
+      );
+    }
+    return (data ?? []).map((row) => this.mapOrderRow(row));
   }
 
   /**
