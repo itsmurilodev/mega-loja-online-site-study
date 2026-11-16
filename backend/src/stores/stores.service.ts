@@ -1,6 +1,6 @@
 import { Injectable, InternalServerErrorException } from "@nestjs/common";
 import { performance } from "node:perf_hooks";
-import { StoreRow } from "../common/constants";
+import { CD_STORE_ID, StoreRow, TRANSFER_ETA_DIAS } from "../common/constants";
 import { RnfMetricsService } from "../common/metrics/rnf-metrics.service";
 import { SupabaseService } from "../supabase/supabase.service";
 
@@ -89,11 +89,11 @@ export class StoresService {
 
   async findActiveStoreById(
     storeId: number
-  ): Promise<{ id: number; name: string } | null> {
+  ): Promise<{ id: number; name: string; capacity: number } | null> {
     const supabase = this.supabaseService.client;
     const { data, error } = await supabase
       .from("stores")
-      .select("id, name")
+      .select("id, name, capacity")
       .eq("id", storeId)
       .eq("active", 1)
       .maybeSingle();
@@ -103,7 +103,87 @@ export class StoresService {
         `Erro no banco de dados (Supabase): ${error.message}`
       );
     }
-    return data ? { id: Number(data.id), name: data.name } : null;
+    return data
+      ? { id: Number(data.id), name: data.name, capacity: Number(data.capacity) }
+      : null;
+  }
+
+  /**
+   * S3-25 - De onde dá para trazer o item quando a filial escolhida não tem.
+   * Procura nas outras filiais ativas e no Centro de Distribuição (loja 99,
+   * inativa para retirada, mas com estoque próprio) e informa o novo prazo.
+   */
+  async listTransferOptions(
+    storeId: number,
+    productId: number,
+    quantity: number
+  ): Promise<
+    {
+      store_id: number;
+      name: string;
+      kind: "filial" | "cd";
+      available: number;
+      eta_days: number;
+    }[]
+  > {
+    const supabase = this.supabaseService.client;
+    const { data: inv, error } = await supabase
+      .from("inventory")
+      .select("store_id, quantity")
+      .eq("product_id", productId)
+      .gte("quantity", quantity);
+    if (error) {
+      throw new InternalServerErrorException(
+        `Erro no banco de dados (Supabase): ${error.message}`
+      );
+    }
+
+    const candidatos = (inv ?? []).filter(
+      (row: any) => Number(row.store_id) !== storeId
+    );
+    if (candidatos.length === 0) {
+      return [];
+    }
+
+    const { data: lojas, error: storesErr } = await supabase
+      .from("stores")
+      .select("id, name, active")
+      .in(
+        "id",
+        candidatos.map((row: any) => Number(row.store_id))
+      );
+    if (storesErr) {
+      throw new InternalServerErrorException(
+        `Erro no banco de dados (Supabase): ${storesErr.message}`
+      );
+    }
+
+    const opcoes: { store_id: number; name: string; kind: "filial" | "cd"; available: number; eta_days: number }[] = [];
+    for (const loja of lojas ?? []) {
+      const id = Number(loja.id);
+      const ehCd = id === CD_STORE_ID;
+      if (!ehCd && Number(loja.active) !== 1) continue;
+      const row = candidatos.find((r: any) => Number(r.store_id) === id);
+      opcoes.push({
+        store_id: id,
+        name: loja.name as string,
+        kind: (ehCd ? "cd" : "filial") as "filial" | "cd",
+        available: Number(row?.quantity ?? 0),
+        eta_days: ehCd ? TRANSFER_ETA_DIAS.cd : TRANSFER_ETA_DIAS.filial,
+      });
+    }
+    // Primeiro o que chega mais rápido.
+    return opcoes.sort((a, b) => a.eta_days - b.eta_days || b.available - a.available);
+  }
+
+  /** Nome de uma loja ou do CD, para mensagens (não exige estar ativa). */
+  async findStoreName(storeId: number): Promise<string | null> {
+    const { data } = await this.supabaseService.client
+      .from("stores")
+      .select("name")
+      .eq("id", storeId)
+      .maybeSingle();
+    return data?.name ?? null;
   }
 
   /**

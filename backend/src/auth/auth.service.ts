@@ -25,7 +25,7 @@ import {
 /**
  * S3-07 / S3-14: autenticação feita pelo Supabase Auth.
  * Nenhuma senha é guardada no nosso banco: o login confere e-mail e senha no
- * Supabase e o papel (cliente, operador ou empresa) vem de `app_metadata.role`,
+ * Supabase e o papel (cliente, operador, gerente ou empresa) vem de `app_metadata.role`,
  * que só pode ser alterado com a service role key (nunca pelo próprio usuário).
  */
 @Injectable()

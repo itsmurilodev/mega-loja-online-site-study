@@ -9,17 +9,23 @@ import {
   Patch,
   Post,
   Query,
+  Req,
   UseGuards,
 } from "@nestjs/common";
+import { AuthUser } from "../auth/auth.types";
 import { Roles, RolesGuard } from "../auth/roles.guard";
 import { ProductRow } from "../common/constants";
 import { CreateProductDto, UpdateProductDto } from "./dto/product.dto";
+import { AuditService } from "../supabase/audit.service";
 import { ProductsService } from "./products.service";
 
 @Controller("api/products")
 @UseGuards(RolesGuard)
 export class ProductsController {
-  constructor(private readonly productsService: ProductsService) {}
+  constructor(
+    private readonly productsService: ProductsService,
+    private readonly auditService: AuditService
+  ) {}
 
   @Get()
   async getProducts(
@@ -38,9 +44,16 @@ export class ProductsController {
   @Roles("empresa")
   @HttpCode(HttpStatus.CREATED)
   async createProduct(
+    @Req() request: { user: AuthUser },
     @Body() payload: CreateProductDto
   ): Promise<{ product: ProductRow }> {
     const product = await this.productsService.createProduct(payload ?? {});
+    await this.auditService.record(
+      request.user,
+      "cadastrar_produto",
+      null,
+      `Produto #${product.id} ${product.name} (R$ ${product.price})`
+    );
     return { product };
   }
 
@@ -48,6 +61,7 @@ export class ProductsController {
   @Patch(":id")
   @Roles("empresa")
   async updateProduct(
+    @Req() request: { user: AuthUser },
     @Param("id") id: string,
     @Body() payload: UpdateProductDto
   ): Promise<{ product: ProductRow }> {
@@ -57,6 +71,12 @@ export class ProductsController {
     const product = await this.productsService.updateProduct(
       Number(id),
       payload ?? {}
+    );
+    await this.auditService.record(
+      request.user,
+      "alterar_produto",
+      null,
+      `Produto #${product.id} ${product.name}: ${Object.keys(payload ?? {}).join(", ")}`
     );
     return { product };
   }
