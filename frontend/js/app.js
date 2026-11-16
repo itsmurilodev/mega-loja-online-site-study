@@ -1,1270 +1,1045 @@
-        const isFileProtocol = window.location.protocol === 'file:';
-        const isLocalHost = ['localhost', '127.0.0.1', ''].includes(window.location.hostname);
-        const API_BASE_URL = (isFileProtocol || (isLocalHost && window.location.port !== '5000'))
-            ? 'http://127.0.0.1:5000'
-            : '';
+// Loja do cliente (front.html): vitrine, produto, carrinho com vários itens, pedidos e conta.
+// Depende de js/common.js (API_BASE_URL, criarApiFetch, esc, formatarMoeda, triggerToast...).
 
-        // Estado Global da Aplicação
-        let dbProdutos = [];
-        let dbLojas = {};
-        let lojaAtiva = { id: 1, nome: 'MegaLoja - Filial Canoas Centro', endereco: 'Av. Guilherme Schell, 5000' };
-        let lojaTemp = lojaAtiva;
-        let produtoSelecionado = null;
-        let filtroPrecoAtivo = 'todos';
-        let categoriaAtiva = 'todos';
+const CHAVE_SESSAO = 'megaloja_sessao';
+const CHAVE_CARRINHO = 'megaloja_carrinho';
+const CHAVE_PEDIDOS = 'megaloja_pedidos';
+const CHAVE_FILIAL = 'megaloja_filial';
+const LIMITE_POR_ITEM = 20;
 
-        let pedidoAtivo = null;
-        let pedidosBalcao = [];
-        let pedidoSeparacaoSelecionado = null;
-        let pedidoRetiradaLocalizado = null;
+// ---------------------------------------------------------------------------
+// Estado
+// ---------------------------------------------------------------------------
+let dbProdutos = [];
+let dbLojas = {};
+let lojaAtiva = { id: 1, nome: 'MegaLoja - Filial Canoas Centro', endereco: '', cidade: 'Canoas' };
+let lojaTemp = lojaAtiva;
+let produtoSelecionado = null;
+let filtroPrecoAtivo = 'todos';
+let categoriaAtiva = 'todos';
+let abaAtual = 'vitrine';
+let finalizando = false;
+let pedidosNovos = [];
+let timerPedidos = null;
 
-        // Estado de Rotas e Autenticação (Cliente vs Operador/Admin)
-        let rotaAtual = 'cliente'; // 'cliente' ou 'operador'
+let sessao = lerStorage(localStorage, CHAVE_SESSAO, null); // { access_token, user }
+let carrinho = lerStorage(localStorage, CHAVE_CARRINHO, []); // [{ id, qtd }]
+if (!Array.isArray(carrinho)) carrinho = [];
 
-        // Cliente Autenticado (salvo em localStorage)
-        let clienteLogado = (() => {
-            try {
-                return JSON.parse(localStorage.getItem('megaloja_cliente') || 'null');
-            } catch (e) {
-                return null;
-            }
-        })() || {
-            nome: 'Murilo Alves',
-            cpf: '123.456.789-00',
-            email: 'murilo@unilasalle.edu.br',
-            telefone: '(51) 99887-6655'
-        };
+const apiFetch = criarApiFetch({
+    getToken: () => (sessao ? sessao.access_token : null),
+    aoNaoAutorizado: () => {
+        encerrarSessaoLocal();
+        triggerToast('Sessão expirada', 'Entre novamente para continuar.', 'warning');
+    },
+});
 
-        // Operador/Admin Autenticado (salvo em sessionStorage para simulação de sessão)
-        let operadorLogado = (() => {
-            try {
-                return JSON.parse(sessionStorage.getItem('megaloja_operador') || 'null');
-            } catch (e) {
-                return null;
-            }
-        })();
+// ---------------------------------------------------------------------------
+// Inicialização
+// ---------------------------------------------------------------------------
+window.addEventListener('load', async () => {
+    atualizarInterfaceCliente();
+    await carregarDadosBackend();
+    renderizarCategorias();
+    executarFiltrosCombinados();
+    renderizarLojasModal();
+    atualizarLayoutFocoLoja();
+    atualizarBadgeCarrinho();
+    mudarAba('vitrine');
+});
 
-        // Inicialização
-        window.onload = async () => {
-            atualizarInterfaceCliente();
-            await carregarDadosBackend();
-            executarFiltrosCombinados();
-            renderizarLojasModal();
-            atualizarLayoutFocoLoja();
+document.addEventListener('keydown', (e) => {
+    if (e.key !== 'Escape') return;
+    fecharModalLoja();
+    fecharModalAuthCliente();
+});
 
-            // Resolve a rota a partir da URL (/operador ou /cliente)
-            const rotaInicial = obterRotaDaUrl();
-            navegarPara(rotaInicial, false);
+async function carregarDadosBackend() {
+    try {
+        const [produtosResp, lojasResp] = await Promise.all([
+            apiFetch('/api/products?include=stock'),
+            apiFetch('/api/stores'),
+        ]);
 
-            await recarregarPedidosBalcao();
-        };
+        dbProdutos = produtosResp.products.map((p) => ({
+            id: p.id,
+            nome: p.name,
+            categoria: p.category,
+            preco: Number(p.price),
+            sku: p.sku || `SKU-${p.id}`,
+            barcode: p.barcode || `7891000${p.id}`,
+            img: p.image_url || 'https://images.unsplash.com/photo-1523275335684-37898b6baf30?w=500&q=80',
+            estoques: p.stocks || {},
+        }));
 
-        window.addEventListener('popstate', () => {
-            navegarPara(obterRotaDaUrl(), false);
+        const lojasAgrupadas = {};
+        lojasResp.stores.forEach((loja) => {
+            const chave = slugCidade(loja.city);
+            (lojasAgrupadas[chave] ||= []).push({
+                id: loja.id,
+                nome: loja.name,
+                endereco: loja.address,
+                cidade: loja.city,
+            });
+        });
+        dbLojas = lojasAgrupadas;
+
+        const todas = Object.values(dbLojas).flat();
+        const salva = Number(lerStorage(localStorage, CHAVE_FILIAL, 0));
+        lojaAtiva = todas.find((l) => l.id === salva)
+            || dbLojas['canoas']?.[0]
+            || todas[0]
+            || lojaAtiva;
+        lojaTemp = lojaAtiva;
+
+        // Tira do carrinho produtos que saíram do catálogo.
+        const idsValidos = new Set(dbProdutos.map((p) => p.id));
+        const filtrado = carrinho.filter((item) => idsValidos.has(item.id));
+        if (filtrado.length !== carrinho.length) {
+            carrinho = filtrado;
+            salvarCarrinho();
+        }
+    } catch (err) {
+        console.warn('Backend indisponível:', err);
+        triggerToast('Servidor indisponível', 'Não foi possível carregar o catálogo. Tente novamente em instantes.', 'warning');
+    }
+}
+
+function estoqueNaFilial(produto) {
+    return Number(produto.estoques[lojaAtiva.id] || 0);
+}
+
+// ---------------------------------------------------------------------------
+// Navegação entre telas
+// ---------------------------------------------------------------------------
+function mudarAba(destino) {
+    abaAtual = destino;
+    ['vitrine', 'detalhe', 'carrinho', 'pedidos'].forEach((aba) => {
+        document.getElementById(`aba-${aba}`)?.classList.add('hidden');
+    });
+    document.getElementById(`aba-${destino}`)?.classList.remove('hidden');
+    document.getElementById('wrapper-banner')?.classList.toggle('hidden', destino !== 'vitrine');
+
+    clearInterval(timerPedidos);
+    if (destino === 'pedidos') {
+        timerPedidos = setInterval(() => carregarPedidosCliente(false), 20000);
+    }
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+}
+
+function irParaVitrine() {
+    mudarAba('vitrine');
+}
+
+// ---------------------------------------------------------------------------
+// Vitrine
+// ---------------------------------------------------------------------------
+const ROTULOS_CATEGORIA = {
+    eletronicos: ['Eletrônicos', 'fa-tv'],
+    casa: ['Ferramentas & Casa', 'fa-screwdriver-wrench'],
+    eletrodomesticos: ['Eletrodomésticos', 'fa-couch'],
+};
+
+function rotuloCategoria(chave) {
+    if (ROTULOS_CATEGORIA[chave]) return ROTULOS_CATEGORIA[chave];
+    const texto = String(chave || 'Outros');
+    return [texto.charAt(0).toUpperCase() + texto.slice(1), 'fa-tag'];
+}
+
+// Os departamentos vêm do catálogo: produto novo com categoria nova ganha o seu botão.
+function renderizarCategorias() {
+    const barra = document.getElementById('barra-categorias');
+    if (!barra) return;
+    const categorias = [...new Set(dbProdutos.map((p) => p.categoria))].sort();
+    const botoes = [['todos', 'Todos os Departamentos', 'fa-border-all'],
+        ...categorias.map((c) => [c, ...rotuloCategoria(c)])];
+
+    barra.replaceChildren();
+    botoes.forEach(([chave, rotulo, icone]) => {
+        const btn = document.createElement('button');
+        btn.type = 'button';
+        btn.id = `cat-${chave}`;
+        btn.dataset.categoria = chave;
+        btn.addEventListener('click', () => filtrarCategoria(chave));
+        const i = document.createElement('i');
+        i.className = `fa-solid ${icone} mr-1`;
+        btn.append(i, document.createTextNode(` ${rotulo}`));
+        barra.appendChild(btn);
+    });
+    marcarCategoriaAtiva();
+}
+
+function marcarCategoriaAtiva() {
+    document.querySelectorAll('#barra-categorias button').forEach((btn) => {
+        btn.className = btn.dataset.categoria === categoriaAtiva
+            ? 'bg-white text-blue-700 px-3 py-1 rounded-lg font-bold shadow-sm whitespace-nowrap'
+            : 'hover:bg-blue-700 px-3 py-1 rounded-lg transition-colors whitespace-nowrap';
+    });
+}
+
+function renderizarVitrine(lista) {
+    const grid = document.getElementById('grid-produtos');
+    grid.innerHTML = '';
+    document.getElementById('contador-produtos').innerText = `${lista.length} produtos disponíveis`;
+
+    if (lista.length === 0) {
+        grid.innerHTML = `
+            <div class="col-span-full text-center py-16 bg-white rounded-2xl border border-gray-200 text-gray-400 font-medium text-xs">
+                <i class="fa-solid fa-box-open text-4xl block mb-2 text-gray-300"></i> Nenhum produto encontrado para estes filtros.
+                <button type="button" onclick="limparFiltrosVitrine()" class="block mx-auto mt-3 text-blue-600 hover:text-blue-800 font-bold underline">Limpar busca e filtros</button>
+            </div>`;
+        return;
+    }
+
+    lista.forEach((p) => {
+        const qtdEstoque = estoqueNaFilial(p);
+        const card = document.createElement('article');
+        card.className = 'bg-white border border-gray-200 rounded-2xl p-4 flex flex-col justify-between hover:shadow-xl transition-all duration-300 group cursor-pointer hover:border-blue-400';
+        card.addEventListener('click', () => carregarDetalhesProduto(p.id));
+
+        card.innerHTML = `
+            <div>
+                <div class="w-full h-44 bg-gray-50 rounded-xl flex items-center justify-center overflow-hidden border border-gray-100 mb-4 relative">
+                    <img src="${esc(p.img)}" alt="${esc(p.nome)}" class="max-h-full max-w-full object-contain group-hover:scale-105 transition-transform duration-300">
+                </div>
+                <span class="text-[9px] font-black text-blue-600 uppercase tracking-wider bg-blue-50 px-2 py-0.5 rounded">${esc(p.categoria)}</span>
+                <h3 class="font-bold text-xs text-gray-800 mt-2 line-clamp-2 min-h-[32px] group-hover:text-blue-600 transition-colors">${esc(p.nome)}</h3>
+                <p class="text-[10px] text-gray-400 font-mono mt-1">SKU: ${esc(p.sku)}</p>
+            </div>
+            <div class="mt-4 pt-3 border-t border-gray-100 space-y-3">
+                <div class="flex justify-between items-baseline">
+                    <span class="text-base font-black text-slate-950">${formatarMoeda(p.preco)}</span>
+                    <span class="text-[9px] font-black ${qtdEstoque > 0 ? 'text-emerald-700 bg-emerald-50' : 'text-amber-700 bg-amber-50'} px-2 py-0.5 rounded">
+                        <i class="fa-solid ${qtdEstoque > 0 ? 'fa-circle-check' : 'fa-clock'} mr-0.5"></i> ${qtdEstoque > 0 ? `${qtdEstoque} un. na filial` : 'Sem estoque na filial'}
+                    </span>
+                </div>
+                <div class="flex gap-2">
+                    <button type="button" data-acao="comprar" class="flex-1 bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 rounded-xl text-xs transition-colors flex items-center justify-center gap-1.5 shadow-sm">
+                        <i class="fa-solid fa-bag-shopping text-[11px]"></i> Comprar
+                    </button>
+                    <button type="button" data-acao="adicionar" class="px-3 bg-white hover:bg-blue-50 text-blue-700 border border-blue-300 rounded-xl text-xs transition-colors" title="Adicionar ao carrinho" aria-label="Adicionar ${esc(p.nome)} ao carrinho">
+                        <i class="fa-solid fa-cart-plus"></i>
+                    </button>
+                </div>
+            </div>`;
+
+        card.querySelector('[data-acao="comprar"]').addEventListener('click', (e) => {
+            e.stopPropagation();
+            adicionarAoCarrinho(p.id, 1, true);
+        });
+        card.querySelector('[data-acao="adicionar"]').addEventListener('click', (e) => {
+            e.stopPropagation();
+            adicionarAoCarrinho(p.id, 1, false);
+        });
+        grid.appendChild(card);
+    });
+}
+
+// ---------------------------------------------------------------------------
+// Ficha do produto
+// ---------------------------------------------------------------------------
+// RF006 (S2-19): descricao, garantia e ficha tecnica, indexadas pelo SKU do catalogo.
+const FICHAS_PRODUTO = {
+    'SKU-TV-55': {
+        descricao: 'Smart TV de 55 polegadas com resolução 4K e HDR, que deixa filmes e jogos com mais contraste e cores vivas. Conecta por Wi-Fi e Bluetooth e já vem com os principais aplicativos de streaming.',
+        garantia: '12 meses de garantia do fabricante contra defeitos de fabricação.',
+        ficha: { 'Dimensões (L x A x P)': '123,1 x 71,0 x 6,0 cm (sem base)', 'Peso': '14,2 kg', 'Voltagem': 'Bivolt (100 a 240 V)', 'Cor': 'Preto', 'Material': 'Gabinete em plástico ABS, painel LED' }
+    },
+    'SKU-SMART-5G': {
+        descricao: 'Smartphone 5G com 256 GB de armazenamento e câmera tripla para fotos nítidas de dia e de noite. Tela ampla, bateria para o dia inteiro e carregamento rápido.',
+        garantia: '12 meses de garantia do fabricante (90 dias para o carregador e o cabo).',
+        ficha: { 'Dimensões (L x A x P)': '7,6 x 16,3 x 0,8 cm', 'Peso': '195 g', 'Voltagem': 'Carregador bivolt (100 a 240 V)', 'Cor': 'Preto grafite', 'Material': 'Vidro e alumínio' }
+    },
+    'SKU-FURAD-12': {
+        descricao: 'Furadeira de impacto profissional com mandril de 1/2 polegada e função reversível, para furar madeira, metal e alvenaria. Empunhadura lateral e limitador de profundidade inclusos.',
+        garantia: '6 meses de garantia do fabricante.',
+        ficha: { 'Dimensões (L x A x P)': '28,0 x 21,0 x 7,5 cm', 'Peso': '1,9 kg', 'Voltagem': '127 V', 'Cor': 'Vermelho e preto', 'Material': 'Corpo em polímero reforçado, mandril em aço' }
+    },
+    'SKU-MALETA-142': {
+        descricao: 'Maleta com 142 peças em aço cromo vanádio: soquetes, catracas, chaves combinadas, alicates e bits. Organizada em estojo rígido com trava, para oficina ou manutenção doméstica.',
+        garantia: '3 meses de garantia legal contra defeitos de fabricação.',
+        ficha: { 'Dimensões (L x A x P)': '44,0 x 33,0 x 10,0 cm', 'Peso': '8,7 kg', 'Voltagem': 'Não se aplica', 'Cor': 'Preto e laranja', 'Material': 'Aço cromo vanádio, estojo em polipropileno' }
+    },
+    'SKU-GELAD-410': {
+        descricao: 'Geladeira duplex frost free de 410 litros com acabamento inox e painel digital externo. Prateleiras de vidro temperado e gavetão para frutas e legumes.',
+        garantia: '12 meses de garantia do fabricante (10 anos para o compressor).',
+        ficha: { 'Dimensões (L x A x P)': '70,0 x 186,0 x 73,0 cm', 'Peso': '72 kg', 'Voltagem': '127 V ou 220 V (conferir na retirada)', 'Cor': 'Inox', 'Material': 'Aço com acabamento inox, prateleiras em vidro temperado' }
+    },
+    'SKU-SOFA-SUEDE': {
+        descricao: 'Sofá retrátil de 3 lugares revestido em tecido suede, com assentos que avançam e encosto reclinável. Espuma de alta densidade para uso diário.',
+        garantia: '12 meses de garantia para a estrutura e 3 meses para o tecido.',
+        ficha: { 'Dimensões (L x A x P)': '230 x 95 x 110 cm (fechado)', 'Peso': '68 kg', 'Voltagem': 'Não se aplica', 'Cor': 'Verde', 'Material': 'Estrutura em eucalipto, revestimento em suede' }
+    }
+};
+
+const FICHA_NAO_CADASTRADA = {
+    descricao: 'Descrição detalhada ainda não cadastrada para este produto.',
+    garantia: '3 meses de garantia legal (Código de Defesa do Consumidor).',
+    ficha: {}
+};
+
+function renderizarFichaProduto(produto) {
+    const dados = FICHAS_PRODUTO[produto.sku] || FICHA_NAO_CADASTRADA;
+
+    document.getElementById('detalhe-descricao').textContent = dados.descricao;
+    document.getElementById('detalhe-garantia').textContent = dados.garantia;
+
+    const lista = document.getElementById('detalhe-ficha-tecnica');
+    lista.replaceChildren();
+    const itens = Object.entries(dados.ficha);
+    if (itens.length === 0) {
+        itens.push(['Ficha técnica', 'Não cadastrada']);
+    }
+    itens.forEach(([rotulo, valor]) => {
+        const linha = document.createElement('div');
+        linha.className = 'flex justify-between gap-4 px-3 py-2';
+        const termo = document.createElement('dt');
+        termo.className = 'text-gray-500 font-semibold shrink-0';
+        termo.textContent = rotulo;
+        const descricao = document.createElement('dd');
+        descricao.className = 'text-gray-900 font-medium text-right';
+        descricao.textContent = valor;
+        linha.append(termo, descricao);
+        lista.appendChild(linha);
+    });
+}
+
+function carregarDetalhesProduto(id) {
+    produtoSelecionado = dbProdutos.find((p) => p.id === id);
+    if (!produtoSelecionado) return;
+    const p = produtoSelecionado;
+
+    document.getElementById('detalhe-categoria').textContent = p.categoria;
+    document.getElementById('detalhe-nome').textContent = p.nome;
+    document.getElementById('detalhe-preco').textContent = formatarMoeda(p.preco);
+    document.getElementById('detalhe-preco-pix').textContent = formatarMoeda(p.preco * 0.95);
+    document.getElementById('detalhe-economia-pix').textContent = formatarMoeda(p.preco * 0.05);
+    document.getElementById('detalhe-parcelamento').textContent = `ou 12x de ${formatarMoeda(p.preco / 12)} sem juros`;
+    document.getElementById('detalhe-codigos').textContent = `SKU: ${p.sku} | Cód. barras: ${p.barcode}`;
+
+    const img = document.getElementById('detalhe-imagem');
+    img.src = p.img;
+    img.alt = p.nome;
+
+    renderizarFichaProduto(p);
+    atualizarLayoutFocoLoja();
+    mudarAba('detalhe');
+}
+
+function adicionarProdutoSelecionado(irParaCarrinho) {
+    if (!produtoSelecionado) {
+        triggerToast('Escolha um produto', 'Selecione um produto na vitrine.', 'warning');
+        return;
+    }
+    adicionarAoCarrinho(produtoSelecionado.id, 1, irParaCarrinho);
+}
+
+// ---------------------------------------------------------------------------
+// Carrinho (vários itens, guardado no navegador)
+// ---------------------------------------------------------------------------
+function salvarCarrinho() {
+    gravarStorage(localStorage, CHAVE_CARRINHO, carrinho);
+    atualizarBadgeCarrinho();
+}
+
+function totalDeItens() {
+    return carrinho.reduce((soma, item) => soma + item.qtd, 0);
+}
+
+function atualizarBadgeCarrinho() {
+    const badge = document.getElementById('nav-carrinho-badge');
+    if (badge) badge.innerText = String(totalDeItens());
+}
+
+function adicionarAoCarrinho(produtoId, qtd = 1, abrir = false) {
+    const produto = dbProdutos.find((p) => p.id === produtoId);
+    if (!produto) return;
+
+    const estoque = estoqueNaFilial(produto);
+    if (estoque <= 0) {
+        triggerToast('Sem estoque nesta filial', `${produto.nome} está em falta em ${lojaAtiva.nome}. Troque a filial de retirada.`, 'warning');
+        return;
+    }
+
+    const existente = carrinho.find((item) => item.id === produtoId);
+    const limite = Math.min(estoque, LIMITE_POR_ITEM);
+    const atual = existente ? existente.qtd : 0;
+
+    if (atual >= limite) {
+        triggerToast('Limite atingido', `Só há ${estoque} un. de ${produto.nome} nesta filial.`, 'warning');
+    } else {
+        const novaQtd = Math.min(atual + qtd, limite);
+        if (existente) existente.qtd = novaQtd;
+        else carrinho.push({ id: produtoId, qtd: novaQtd });
+        salvarCarrinho();
+        triggerToast('Adicionado ao carrinho', `${produto.nome} (${novaQtd} no carrinho)`, 'success');
+    }
+
+    if (abrir) abrirCarrinho();
+    else if (abaAtual === 'carrinho') renderizarCarrinho();
+}
+
+function alterarQuantidade(produtoId, delta) {
+    const item = carrinho.find((i) => i.id === produtoId);
+    const produto = dbProdutos.find((p) => p.id === produtoId);
+    if (!item || !produto) return;
+
+    const limite = Math.max(1, Math.min(estoqueNaFilial(produto), LIMITE_POR_ITEM));
+    const nova = item.qtd + delta;
+    if (nova < 1) {
+        removerDoCarrinho(produtoId);
+        return;
+    }
+    if (nova > limite) {
+        triggerToast('Limite atingido', `Só há ${estoqueNaFilial(produto)} un. de ${produto.nome} nesta filial.`, 'warning');
+        return;
+    }
+    item.qtd = nova;
+    salvarCarrinho();
+    renderizarCarrinho();
+}
+
+function removerDoCarrinho(produtoId) {
+    carrinho = carrinho.filter((i) => i.id !== produtoId);
+    salvarCarrinho();
+    renderizarCarrinho();
+}
+
+function limparCarrinho() {
+    if (carrinho.length === 0) return;
+    if (!confirm('Remover todos os itens do carrinho?')) return;
+    carrinho = [];
+    salvarCarrinho();
+    renderizarCarrinho();
+}
+
+function abrirCarrinho() {
+    renderizarCarrinho();
+    mudarAba('carrinho');
+}
+
+function itensDoCarrinho() {
+    return carrinho
+        .map((item) => ({ ...item, produto: dbProdutos.find((p) => p.id === item.id) }))
+        .filter((item) => item.produto);
+}
+
+function renderizarCarrinho() {
+    const itens = itensDoCarrinho();
+    const conteudo = document.getElementById('carrinho-conteudo');
+    const vazio = document.getElementById('carrinho-vazio');
+    conteudo.classList.toggle('hidden', itens.length === 0);
+    vazio.classList.toggle('hidden', itens.length > 0);
+
+    const lista = document.getElementById('lista-carrinho');
+    lista.replaceChildren();
+
+    let subtotal = 0;
+    let unidades = 0;
+    let semEstoque = 0;
+
+    itens.forEach(({ produto, qtd }) => {
+        const estoque = estoqueNaFilial(produto);
+        const problema = estoque < qtd;
+        if (problema) semEstoque += 1;
+        subtotal += produto.preco * qtd;
+        unidades += qtd;
+
+        const linha = document.createElement('div');
+        linha.className = 'flex flex-col sm:flex-row sm:items-center gap-4 py-4 first:pt-0 last:pb-0';
+        linha.innerHTML = `
+            <div class="flex items-center gap-4 flex-1 min-w-0">
+                <div class="w-20 h-20 bg-gray-50 rounded-xl p-2 border border-gray-100 flex items-center justify-center shrink-0">
+                    <img src="${esc(produto.img)}" alt="" class="max-h-full max-w-full object-contain">
+                </div>
+                <div class="min-w-0">
+                    <span class="text-[9px] font-black text-blue-600 uppercase tracking-widest bg-blue-50 px-2 py-0.5 rounded">${esc(produto.categoria)}</span>
+                    <h3 class="font-bold text-sm text-gray-900 mt-1 truncate">${esc(produto.nome)}</h3>
+                    <p class="text-[10px] text-gray-400 font-mono mt-0.5">SKU: ${esc(produto.sku)}</p>
+                    <p class="text-[10px] font-bold mt-1 ${problema ? 'text-red-600' : 'text-emerald-600'}">
+                        ${problema
+                            ? `Só ${estoque} un. disponíveis nesta filial — ajuste a quantidade`
+                            : `${estoque} un. disponíveis na filial`}
+                    </p>
+                </div>
+            </div>
+            <div class="flex items-center justify-between sm:justify-end gap-5 shrink-0">
+                <div class="flex items-center border border-gray-300 rounded-xl overflow-hidden" role="group" aria-label="Quantidade de ${esc(produto.nome)}">
+                    <button type="button" data-delta="-1" class="px-3 py-1.5 text-gray-700 hover:bg-gray-100 font-black" aria-label="Diminuir quantidade">−</button>
+                    <span class="px-3 text-xs font-black min-w-[2rem] text-center" aria-live="polite">${qtd}</span>
+                    <button type="button" data-delta="1" class="px-3 py-1.5 text-gray-700 hover:bg-gray-100 font-black" aria-label="Aumentar quantidade">+</button>
+                </div>
+                <div class="text-right min-w-[88px]">
+                    <span class="text-[10px] text-gray-400 block font-semibold uppercase">Valor</span>
+                    <span class="text-base font-black text-gray-900">${formatarMoeda(produto.preco * qtd)}</span>
+                </div>
+                <button type="button" data-remover class="text-gray-400 hover:text-red-600 p-2" title="Remover do carrinho" aria-label="Remover ${esc(produto.nome)} do carrinho">
+                    <i class="fa-solid fa-trash-can"></i>
+                </button>
+            </div>`;
+
+        linha.querySelectorAll('[data-delta]').forEach((btn) => {
+            btn.addEventListener('click', () => alterarQuantidade(produto.id, Number(btn.dataset.delta)));
+        });
+        linha.querySelector('[data-remover]').addEventListener('click', () => removerDoCarrinho(produto.id));
+        lista.appendChild(linha);
+    });
+
+    document.getElementById('carrinho-resumo-itens').innerText =
+        `Subtotal (${unidades} ${unidades === 1 ? 'item' : 'itens'})`;
+    document.getElementById('carrinho-resumo-subtotal').innerText = formatarMoeda(subtotal);
+    document.getElementById('carrinho-resumo-total').innerText = formatarMoeda(subtotal);
+    document.getElementById('carrinho-resumo-pix').innerText = formatarMoeda(subtotal * 0.95);
+    document.getElementById('carrinho-resumo-parcelas').innerText =
+        `ou em até 12x de ${formatarMoeda(subtotal / 12)} sem juros no cartão`;
+
+    const info = document.getElementById('txt-status-loja-info');
+    if (info) {
+        if (itens.length === 0) {
+            info.className = 'text-[11px] font-medium text-gray-500 mt-0.5';
+            info.textContent = '—';
+        } else if (semEstoque > 0) {
+            info.className = 'text-[11px] font-semibold text-red-600 mt-0.5';
+            info.textContent = `${semEstoque} ${semEstoque === 1 ? 'item sem' : 'itens sem'} estoque suficiente nesta filial`;
+        } else {
+            info.className = 'text-[11px] font-semibold text-emerald-600 mt-0.5';
+            info.textContent = 'Todos os itens têm estoque nesta filial';
+        }
+    }
+
+    atualizarLayoutFocoLoja();
+    preencherDadosDoTitular();
+}
+
+function toggleCamposTerceiro() {
+    const habilitado = document.getElementById('chk-habilitar-terceiro').checked;
+    document.getElementById('box-terceiro').classList.toggle('hidden', !habilitado);
+}
+
+function preencherDadosDoTitular() {
+    if (!sessao) return;
+    const nome = document.getElementById('chk-nome-cliente');
+    const cpf = document.getElementById('chk-cpf-cliente');
+    if (nome && !nome.value) nome.value = sessao.user.name || '';
+    if (cpf && !cpf.value) cpf.value = sessao.user.cpf || '';
+}
+
+// ---------------------------------------------------------------------------
+// Filtros e busca
+// ---------------------------------------------------------------------------
+function filtrarCategoria(cat) {
+    categoriaAtiva = cat;
+    marcarCategoriaAtiva();
+    document.getElementById('titulo-vitrine').innerText =
+        cat === 'todos' ? 'Todos os Departamentos' : rotuloCategoria(cat)[0];
+    executarFiltrosCombinados();
+    if (abaAtual !== 'vitrine') mudarAba('vitrine');
+}
+
+function filtrarPorPreco(range) {
+    filtroPrecoAtivo = range;
+    executarFiltrosCombinados();
+}
+
+function filtrarPorNome() {
+    // Quem digita na busca estando em outra tela volta para a vitrine.
+    if (abaAtual !== 'vitrine') mudarAba('vitrine');
+    executarFiltrosCombinados();
+}
+
+// S2-11: busca sem diferenciar maiusculas nem acentos ("eletronicos" acha "Eletrônicos").
+function normalizarTexto(texto) {
+    return String(texto)
+        .toLowerCase()
+        .normalize('NFD')
+        .replace(/[̀-ͯ]/g, '');
+}
+
+function produtoCombinaComBusca(produto, termos) {
+    const textoDoProduto = normalizarTexto(
+        `${produto.nome} ${produto.categoria} ${produto.sku} ${produto.barcode}`
+    );
+    return termos.every((termo) => textoDoProduto.includes(termo));
+}
+
+const ORDENACOES_VITRINE = {
+    'menor-preco': (a, b) => a.preco - b.preco,
+    'maior-preco': (a, b) => b.preco - a.preco,
+    'nome': (a, b) => a.nome.localeCompare(b.nome, 'pt-BR'),
+    'estoque': (a, b) => estoqueNaFilial(b) - estoqueNaFilial(a)
+};
+
+function limparFiltrosVitrine() {
+    document.getElementById('input-busca').value = '';
+    document.getElementById('filtro-com-estoque').checked = false;
+    document.getElementById('ordenacao-vitrine').value = 'padrao';
+    document.querySelector('input[name="filtro-preco"][value="todos"]').checked = true;
+    filtroPrecoAtivo = 'todos';
+    filtrarCategoria('todos');
+}
+
+function executarFiltrosCombinados() {
+    let resultado = dbProdutos;
+    if (categoriaAtiva !== 'todos') {
+        resultado = resultado.filter((p) => p.categoria === categoriaAtiva);
+    }
+    if (filtroPrecoAtivo === 'ate500') {
+        resultado = resultado.filter((p) => p.preco <= 500);
+    } else if (filtroPrecoAtivo === 'de500a2000') {
+        resultado = resultado.filter((p) => p.preco > 500 && p.preco <= 2000);
+    } else if (filtroPrecoAtivo === 'acima2000') {
+        resultado = resultado.filter((p) => p.preco > 2000);
+    }
+    const termos = normalizarTexto(document.getElementById('input-busca').value)
+        .split(/\s+/)
+        .filter(Boolean);
+    if (termos.length > 0) {
+        resultado = resultado.filter((p) => produtoCombinaComBusca(p, termos));
+    }
+    if (document.getElementById('filtro-com-estoque').checked) {
+        resultado = resultado.filter((p) => estoqueNaFilial(p) > 0);
+    }
+    const comparar = ORDENACOES_VITRINE[document.getElementById('ordenacao-vitrine').value];
+    if (comparar) {
+        resultado = [...resultado].sort(comparar);
+    }
+    renderizarVitrine(resultado);
+}
+
+// ---------------------------------------------------------------------------
+// Filial de retirada
+// ---------------------------------------------------------------------------
+function abrirModalLoja() {
+    lojaTemp = lojaAtiva;
+    const seletor = document.getElementById('seletor-cidade');
+    seletor.value = slugCidade(lojaAtiva.cidade || '');
+    renderizarLojasModal();
+    const m = document.getElementById('modal-loja');
+    const c = document.getElementById('modal-content');
+    m.classList.remove('hidden');
+    setTimeout(() => { m.classList.remove('opacity-0'); c.classList.remove('scale-95'); }, 15);
+}
+
+function fecharModalLoja() {
+    const m = document.getElementById('modal-loja');
+    const c = document.getElementById('modal-content');
+    if (m.classList.contains('hidden')) return;
+    m.classList.add('opacity-0'); c.classList.add('scale-95');
+    setTimeout(() => m.classList.add('hidden'), 200);
+}
+
+function renderizarLojasModal() {
+    const seletor = document.getElementById('seletor-cidade');
+    if (seletor.options.length === 0) {
+        Object.entries(dbLojas).forEach(([chave, lojas]) => {
+            const opt = document.createElement('option');
+            opt.value = chave;
+            opt.textContent = lojas[0].cidade;
+            seletor.appendChild(opt);
+        });
+        seletor.value = slugCidade(lojaAtiva.cidade || '') || seletor.value;
+    }
+
+    const box = document.getElementById('box-lista-lojas');
+    box.innerHTML = '';
+
+    (dbLojas[seletor.value] || []).forEach((l) => {
+        const isChecked = l.id === lojaTemp.id;
+        const btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = `w-full text-left border p-3 rounded-xl flex items-center justify-between cursor-pointer transition-all ${isChecked ? 'border-blue-600 bg-blue-50/50' : 'border-gray-200 hover:bg-gray-50'}`;
+        btn.setAttribute('aria-pressed', String(isChecked));
+        btn.addEventListener('click', () => { lojaTemp = l; renderizarLojasModal(); });
+        btn.innerHTML = `
+            <div>
+                <p class="text-xs font-bold text-gray-900">${esc(l.nome)}</p>
+                <p class="text-[10px] text-gray-500">${esc(l.endereco)}</p>
+            </div>
+            <div class="w-4 h-4 rounded-full border flex items-center justify-center ${isChecked ? 'border-blue-600' : 'border-gray-300'}">
+                <div class="w-2 h-2 rounded-full ${isChecked ? 'bg-blue-600' : 'bg-transparent'}"></div>
+            </div>`;
+        box.appendChild(btn);
+    });
+}
+
+function salvarEscolhaLoja() {
+    lojaAtiva = lojaTemp;
+    gravarStorage(localStorage, CHAVE_FILIAL, lojaAtiva.id);
+    fecharModalLoja();
+    atualizarLayoutFocoLoja();
+    executarFiltrosCombinados();
+
+    // Ajusta o carrinho ao estoque da nova filial (sem apagar o que o cliente escolheu).
+    if (abaAtual === 'carrinho') renderizarCarrinho();
+    if (abaAtual === 'detalhe' && produtoSelecionado) carregarDetalhesProduto(produtoSelecionado.id);
+    triggerToast('Filial atualizada', `Retirada em: ${lojaAtiva.nome}`, 'success');
+}
+
+function atualizarLayoutFocoLoja() {
+    const nomeCurto = lojaAtiva.nome.replace('MegaLoja - Filial ', '');
+    const elNav = document.getElementById('nav-loja-nome');
+    const elStatus = document.getElementById('txt-status-loja-nome');
+    const elDetalheFilial = document.getElementById('detalhe-filial-nome');
+    if (elNav) elNav.innerText = nomeCurto;
+    if (elStatus) elStatus.innerText = lojaAtiva.nome;
+    if (elDetalheFilial) elDetalheFilial.innerText = lojaAtiva.nome;
+
+    if (!produtoSelecionado) return;
+    const estoque = estoqueNaFilial(produtoSelecionado);
+    const badge = document.getElementById('detalhe-estoque-badge');
+    if (badge) {
+        if (estoque > 0) {
+            badge.className = 'text-[10px] font-bold px-2 py-1 rounded bg-emerald-100 text-emerald-800';
+            badge.innerText = `Em estoque (${estoque} un.)`;
+        } else {
+            badge.className = 'text-[10px] font-bold px-2 py-1 rounded bg-red-100 text-red-800';
+            badge.innerText = 'Sem estoque nesta filial';
+        }
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Finalizar compra (carrinho -> /api/orders/checkout)
+// ---------------------------------------------------------------------------
+async function finalizarCompra() {
+    if (finalizando) return;
+    const itens = itensDoCarrinho();
+    if (itens.length === 0) {
+        triggerToast('Carrinho vazio', 'Adicione produtos antes de finalizar.', 'warning');
+        return;
+    }
+
+    const semEstoque = itens.filter(({ produto, qtd }) => estoqueNaFilial(produto) < qtd);
+    if (semEstoque.length > 0) {
+        triggerToast('Ajuste o carrinho', `${semEstoque[0].produto.nome} não tem estoque suficiente nesta filial.`, 'warning');
+        return;
+    }
+
+    const nome = document.getElementById('chk-nome-cliente').value.trim();
+    const cpf = document.getElementById('chk-cpf-cliente').value.trim();
+    const comTerceiro = document.getElementById('chk-habilitar-terceiro').checked;
+    const nomeTerceiro = comTerceiro ? document.getElementById('chk-nome-terceiro').value.trim() : null;
+    const cpfTerceiro = comTerceiro ? document.getElementById('chk-cpf-terceiro').value.trim() : null;
+
+    if (!nome || !cpf) {
+        triggerToast('Dados incompletos', 'Preencha o nome e o CPF do titular.', 'warning');
+        return;
+    }
+    if (comTerceiro && (!nomeTerceiro || !cpfTerceiro)) {
+        triggerToast('Dados de quem vai retirar', 'Preencha o nome e o CPF da pessoa autorizada.', 'warning');
+        return;
+    }
+
+    const botao = document.getElementById('btn-finalizar');
+    finalizando = true;
+    botao.disabled = true;
+
+    try {
+        const resp = await apiFetch('/api/orders/checkout', {
+            method: 'POST',
+            body: JSON.stringify({
+                customer_name: nome,
+                customer_cpf: cpf,
+                delivery_method: 'retirar_na_loja',
+                store_id: lojaAtiva.id,
+                items: itens.map(({ produto, qtd }) => ({ product_id: produto.id, quantity: qtd })),
+                card_number: document.getElementById('chk-cartao-numero').value.trim(),
+                simulate_payment_failure: document.getElementById('chk-simular-recusa').checked,
+                third_party_name: nomeTerceiro,
+                third_party_cpf: cpfTerceiro,
+            }),
         });
 
-        async function apiFetch(path, options = {}) {
-            const resp = await fetch(`${API_BASE_URL}${path}`, {
-                headers: { 'Content-Type': 'application/json', ...(options.headers || {}) },
-                ...options
-            });
-            const data = await resp.json();
-            if (!resp.ok) {
-                throw new Error(data.error || 'Erro na comunicação com a API.');
+        const criados = resp.orders || [];
+        guardarPedidosLocais(criados.map((o) => o.id));
+        pedidosNovos = criados.map((o) => o.id);
+
+        // Abate o estoque na memória para a vitrine refletir a compra.
+        criados.forEach((o) => {
+            const produto = dbProdutos.find((p) => p.id === o.product_id);
+            if (produto) {
+                produto.estoques[lojaAtiva.id] = Math.max(0, estoqueNaFilial(produto) - o.quantity);
             }
-            return data;
-        }
+        });
 
-        function slugCidade(nome) {
-            return nome.toLowerCase()
-                .normalize('NFD')
-                .replace(/[\u0300-\u036f]/g, '')
-                .replace(/\s+/g, '-');
-        }
-
-        async function carregarDadosBackend() {
-            try {
-                const health = await apiFetch('/api/health');
-                const produtosResp = await apiFetch('/api/products');
-                
-                const produtosComEstoque = await Promise.all(produtosResp.products.map(async (p) => {
-                    const lojasResp = await apiFetch(`/api/stores?product_id=${p.id}`);
-                    const estoques = {};
-                    lojasResp.stores.forEach(loja => {
-                        estoques[loja.id] = loja.stock || 0;
-                    });
-
-                    return {
-                        id: p.id,
-                        nome: p.name,
-                        categoria: p.category,
-                        preco: p.price,
-                        sku: p.sku || `SKU-${p.id}`,
-                        barcode: p.barcode || `7891000${p.id}`,
-                        img: p.image_url || 'https://images.unsplash.com/photo-1523275335684-37898b6baf30?w=500&q=80',
-                        estoques
-                    };
-                }));
-
-                const lojasResp = await apiFetch('/api/stores');
-                const lojasAgrupadas = {};
-                lojasResp.stores.forEach(loja => {
-                    const chave = slugCidade(loja.city);
-                    if (!lojasAgrupadas[chave]) lojasAgrupadas[chave] = [];
-                    lojasAgrupadas[chave].push({
-                        id: loja.id,
-                        nome: loja.name,
-                        endereco: loja.address,
-                        cidade: loja.city
-                    });
-                });
-
-                dbProdutos = produtosComEstoque;
-                dbLojas = lojasAgrupadas;
-                lojaAtiva = dbLojas['canoas']?.[0] || Object.values(dbLojas)[0]?.[0] || lojaAtiva;
-                lojaTemp = lojaAtiva;
-                triggerToast("Sistema Conectado", "Dados sincronizados com o Sistema Central (S.E.).", "success");
-            } catch (err) {
-                console.warn("Backend offline:", err);
-                triggerToast("Modo Offline", "API indisponível. Inicializando em modo de contingência.", "warning");
-            }
-        }
-
-        // Renderizador da Vitrine
-        function renderizarVitrine(lista) {
-            const grid = document.getElementById('grid-produtos');
-            grid.innerHTML = '';
-            document.getElementById('contador-produtos').innerText = `${lista.length} produtos disponíveis`;
-
-            if (lista.length === 0) {
-                grid.innerHTML = `
-                    <div class="col-span-full text-center py-16 bg-white rounded-2xl border border-gray-200 text-gray-400 font-medium text-xs">
-                        <i class="fa-solid fa-box-open text-4xl block mb-2 text-gray-300"></i> Nenhum produto encontrado para estes filtros.
-                        <button onclick="limparFiltrosVitrine()" class="block mx-auto mt-3 text-blue-600 hover:text-blue-800 font-bold underline">Limpar busca e filtros</button>
-                    </div>`;
-                return;
-            }
-
-            lista.forEach(p => {
-                const qtdEstoque = p.estoques[lojaAtiva.id] || 0;
-                const card = document.createElement('div');
-                card.className = "bg-white border border-gray-200 rounded-2xl p-4 flex flex-col justify-between hover:shadow-xl transition-all duration-300 group cursor-pointer hover:border-blue-400";
-                card.onclick = () => carregarDetalhesProduto(p.id);
-                
-                card.innerHTML = `
-                    <div>
-                        <div class="w-full h-44 bg-gray-50 rounded-xl flex items-center justify-center overflow-hidden border border-gray-100 mb-4 relative">
-                            <img src="${p.img}" alt="${p.nome}" class="max-h-full max-w-full object-contain group-hover:scale-105 transition-transform duration-300">
-                        </div>
-                        <span class="text-[9px] font-black text-blue-600 uppercase tracking-wider bg-blue-50 px-2 py-0.5 rounded">${p.categoria}</span>
-                        <h3 class="font-bold text-xs text-gray-800 mt-2 line-clamp-2 min-h-[32px] group-hover:text-blue-600 transition-colors">${p.nome}</h3>
-                        <p class="text-[10px] text-gray-400 font-mono mt-1">SKU: ${p.sku}</p>
-                    </div>
-
-                    <div class="mt-4 pt-3 border-t border-gray-100 space-y-3">
-                        <div class="flex justify-between items-baseline">
-                            <span class="text-base font-black text-slate-950">R$ ${p.preco.toLocaleString('pt-BR', {minimumFractionDigits: 2})}</span>
-                            <span class="text-[9px] font-black ${qtdEstoque > 0 ? 'text-emerald-700 bg-emerald-50' : 'text-amber-700 bg-amber-50'} px-2 py-0.5 rounded">
-                                <i class="fa-solid ${qtdEstoque > 0 ? 'fa-circle-check' : 'fa-clock'} mr-0.5"></i> ${qtdEstoque > 0 ? `${qtdEstoque} un. na filial` : 'Sem estoque local'}
-                            </span>
-                        </div>
-                        <button onclick="event.stopPropagation(); carregarDetalhesProduto(${p.id})" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 rounded-xl text-xs transition-colors flex items-center justify-center gap-1.5 shadow-sm">
-                            <i class="fa-solid fa-cart-shopping text-[11px]"></i> Comprar
-                        </button>
-                    </div>
-                `;
-                grid.appendChild(card);
-            });
-        }
-
-        // RF006 (S2-19): descricao, garantia e ficha tecnica.
-        // Dados de exemplo guardados no front, indexados pelo SKU do catalogo.
-        const FICHAS_PRODUTO = {
-            'SKU-TV-55': {
-                descricao: 'Smart TV de 55 polegadas com resolução 4K e HDR, que deixa filmes e jogos com mais contraste e cores vivas. Conecta por Wi-Fi e Bluetooth e já vem com os principais aplicativos de streaming.',
-                garantia: '12 meses de garantia do fabricante contra defeitos de fabricação.',
-                ficha: { 'Dimensões (L x A x P)': '123,1 x 71,0 x 6,0 cm (sem base)', 'Peso': '14,2 kg', 'Voltagem': 'Bivolt (100 a 240 V)', 'Cor': 'Preto', 'Material': 'Gabinete em plástico ABS, painel LED' }
-            },
-            'SKU-SMART-5G': {
-                descricao: 'Smartphone 5G com 256 GB de armazenamento e câmera tripla para fotos nítidas de dia e de noite. Tela ampla, bateria para o dia inteiro e carregamento rápido.',
-                garantia: '12 meses de garantia do fabricante (90 dias para o carregador e o cabo).',
-                ficha: { 'Dimensões (L x A x P)': '7,6 x 16,3 x 0,8 cm', 'Peso': '195 g', 'Voltagem': 'Carregador bivolt (100 a 240 V)', 'Cor': 'Preto grafite', 'Material': 'Vidro e alumínio' }
-            },
-            'SKU-FURAD-12': {
-                descricao: 'Furadeira de impacto profissional com mandril de 1/2 polegada e função reversível, para furar madeira, metal e alvenaria. Empunhadura lateral e limitador de profundidade inclusos.',
-                garantia: '6 meses de garantia do fabricante.',
-                ficha: { 'Dimensões (L x A x P)': '28,0 x 21,0 x 7,5 cm', 'Peso': '1,9 kg', 'Voltagem': '127 V', 'Cor': 'Vermelho e preto', 'Material': 'Corpo em polímero reforçado, mandril em aço' }
-            },
-            'SKU-MALETA-142': {
-                descricao: 'Maleta com 142 peças em aço cromo vanádio: soquetes, catracas, chaves combinadas, alicates e bits. Organizada em estojo rígido com trava, para oficina ou manutenção doméstica.',
-                garantia: '3 meses de garantia legal contra defeitos de fabricação.',
-                ficha: { 'Dimensões (L x A x P)': '44,0 x 33,0 x 10,0 cm', 'Peso': '8,7 kg', 'Voltagem': 'Não se aplica', 'Cor': 'Preto e laranja', 'Material': 'Aço cromo vanádio, estojo em polipropileno' }
-            },
-            'SKU-GELAD-410': {
-                descricao: 'Geladeira duplex frost free de 410 litros com acabamento inox e painel digital externo. Prateleiras de vidro temperado e gavetão para frutas e legumes.',
-                garantia: '12 meses de garantia do fabricante (10 anos para o compressor).',
-                ficha: { 'Dimensões (L x A x P)': '70,0 x 186,0 x 73,0 cm', 'Peso': '72 kg', 'Voltagem': '127 V ou 220 V (conferir na retirada)', 'Cor': 'Inox', 'Material': 'Aço com acabamento inox, prateleiras em vidro temperado' }
-            },
-            'SKU-SOFA-SUEDE': {
-                descricao: 'Sofá retrátil de 3 lugares revestido em tecido suede, com assentos que avançam e encosto reclinável. Espuma de alta densidade para uso diário.',
-                garantia: '12 meses de garantia para a estrutura e 3 meses para o tecido.',
-                ficha: { 'Dimensões (L x A x P)': '230 x 95 x 110 cm (fechado)', 'Peso': '68 kg', 'Voltagem': 'Não se aplica', 'Cor': 'Verde', 'Material': 'Estrutura em eucalipto, revestimento em suede' }
-            }
-        };
-
-        const FICHA_NAO_CADASTRADA = {
-            descricao: 'Descrição detalhada ainda não cadastrada para este produto.',
-            garantia: '3 meses de garantia legal (Código de Defesa do Consumidor).',
-            ficha: {}
-        };
-
-        function renderizarFichaProduto(produto) {
-            const dados = FICHAS_PRODUTO[produto.sku] || FICHA_NAO_CADASTRADA;
-
-            document.getElementById('detalhe-descricao').textContent = dados.descricao;
-            document.getElementById('detalhe-garantia').textContent = dados.garantia;
-
-            const lista = document.getElementById('detalhe-ficha-tecnica');
-            lista.replaceChildren();
-            const itens = Object.entries(dados.ficha);
-            if (itens.length === 0) {
-                itens.push(['Ficha técnica', 'Não cadastrada']);
-            }
-            itens.forEach(([rotulo, valor]) => {
-                const linha = document.createElement('div');
-                linha.className = 'flex justify-between gap-4 px-3 py-2';
-                const termo = document.createElement('dt');
-                termo.className = 'text-gray-500 font-semibold shrink-0';
-                termo.textContent = rotulo;
-                const descricao = document.createElement('dd');
-                descricao.className = 'text-gray-900 font-medium text-right';
-                descricao.textContent = valor;
-                linha.append(termo, descricao);
-                lista.appendChild(linha);
-            });
-        }
-
-        function carregarDetalhesProduto(id) {
-            produtoSelecionado = dbProdutos.find(p => p.id === id);
-            if (!produtoSelecionado) return;
-
-            const elCat = document.getElementById('detalhe-categoria');
-            if (elCat) elCat.innerText = produtoSelecionado.categoria;
-            const elNome = document.getElementById('detalhe-nome');
-            if (elNome) elNome.innerText = produtoSelecionado.nome;
-
-            const preco = produtoSelecionado.preco;
-            const precoPix = preco * 0.95;
-            const economiaPix = preco * 0.05;
-            const valorParcela = preco / 12;
-
-            const elPreco = document.getElementById('detalhe-preco');
-            if (elPreco) elPreco.innerText = `R$ ${preco.toLocaleString('pt-BR', {minimumFractionDigits: 2, maximumFractionDigits: 2})}`;
-
-            const elPix = document.getElementById('detalhe-preco-pix');
-            if (elPix) elPix.innerText = `R$ ${precoPix.toLocaleString('pt-BR', {minimumFractionDigits: 2, maximumFractionDigits: 2})}`;
-
-            const elEconomia = document.getElementById('detalhe-economia-pix');
-            if (elEconomia) elEconomia.innerText = `R$ ${economiaPix.toLocaleString('pt-BR', {minimumFractionDigits: 2, maximumFractionDigits: 2})}`;
-
-            const elParc = document.getElementById('detalhe-parcelamento');
-            if (elParc) elParc.innerText = `ou 12x de R$ ${valorParcela.toLocaleString('pt-BR', {minimumFractionDigits: 2, maximumFractionDigits: 2})} sem juros`;
-
-            const elCodigos = document.getElementById('detalhe-codigos');
-            if (elCodigos) elCodigos.innerText = `SKU: ${produtoSelecionado.sku} | Cód. Barras: ${produtoSelecionado.barcode}`;
-            
-            const elImg = document.getElementById('detalhe-imagem');
-            if (elImg) {
-                elImg.src = produtoSelecionado.img;
-                elImg.alt = produtoSelecionado.nome;
-            }
-            renderizarFichaProduto(produtoSelecionado);
-
-            atualizarLayoutFocoLoja();
-            mudarAba('detalhe');
-        }
-
-        // Funções do Carrinho de Compras
-        function irParaCarrinho() {
-            if (!produtoSelecionado) {
-                triggerToast("Seleção Obrigatória", "Selecione um produto para continuar.", "warning");
-                return;
-            }
-            atualizarDadosCarrinho();
-            mudarAba('carrinho');
-        }
-
-        function abrirCarrinho() {
-            if (produtoSelecionado) {
-                atualizarDadosCarrinho();
-            } else {
-                const elConteudo = document.getElementById('carrinho-conteudo');
-                const elVazio = document.getElementById('carrinho-vazio');
-                if (elConteudo) elConteudo.classList.add('hidden');
-                if (elVazio) elVazio.classList.remove('hidden');
-            }
-            mudarAba('carrinho');
-        }
-
-        function atualizarDadosCarrinho() {
-            if (!produtoSelecionado) return;
-
-            const elConteudo = document.getElementById('carrinho-conteudo');
-            const elVazio = document.getElementById('carrinho-vazio');
-            if (elConteudo) elConteudo.classList.remove('hidden');
-            if (elVazio) elVazio.classList.add('hidden');
-
-            const preco = produtoSelecionado.preco;
-            const precoPix = preco * 0.95;
-            const valorParcela = preco / 12;
-
-            const itemImg = document.getElementById('carrinho-item-img');
-            if (itemImg) {
-                itemImg.src = produtoSelecionado.img;
-                itemImg.alt = produtoSelecionado.nome;
-            }
-            const itemCat = document.getElementById('carrinho-item-categoria');
-            if (itemCat) itemCat.innerText = produtoSelecionado.categoria;
-            const itemNome = document.getElementById('carrinho-item-nome');
-            if (itemNome) itemNome.innerText = produtoSelecionado.nome;
-            const itemSku = document.getElementById('carrinho-item-sku');
-            if (itemSku) itemSku.innerText = `SKU: ${produtoSelecionado.sku}`;
-            const itemPreco = document.getElementById('carrinho-item-preco');
-            if (itemPreco) itemPreco.innerText = `R$ ${preco.toLocaleString('pt-BR', {minimumFractionDigits: 2, maximumFractionDigits: 2})}`;
-
-            const subtotal = document.getElementById('carrinho-resumo-subtotal');
-            if (subtotal) subtotal.innerText = `R$ ${preco.toLocaleString('pt-BR', {minimumFractionDigits: 2, maximumFractionDigits: 2})}`;
-            const total = document.getElementById('carrinho-resumo-total');
-            if (total) total.innerText = `R$ ${preco.toLocaleString('pt-BR', {minimumFractionDigits: 2, maximumFractionDigits: 2})}`;
-            const resumoPix = document.getElementById('carrinho-resumo-pix');
-            if (resumoPix) resumoPix.innerText = `R$ ${precoPix.toLocaleString('pt-BR', {minimumFractionDigits: 2, maximumFractionDigits: 2})}`;
-            const resumoParc = document.getElementById('carrinho-resumo-parcelas');
-            if (resumoParc) resumoParc.innerText = `ou em até 12x de R$ ${valorParcela.toLocaleString('pt-BR', {minimumFractionDigits: 2, maximumFractionDigits: 2})} sem juros no cartão`;
-
-            const badge = document.getElementById('nav-carrinho-badge');
-            if (badge) badge.innerText = '1';
-
-            atualizarLayoutFocoLoja();
-        }
-
-        // Filtros e Busca
-        function filtrarCategoria(cat) {
-            categoriaAtiva = cat;
-            ['todos', 'eletronicos', 'casa', 'eletrodomesticos'].forEach(c => {
-                const btn = document.getElementById(`cat-${c}`);
-                if (btn) {
-                    btn.className = (c === cat)
-                        ? "bg-white text-blue-700 px-3 py-1 rounded-lg font-bold shadow-sm whitespace-nowrap"
-                        : "hover:bg-blue-700 px-3 py-1 rounded-lg transition-colors whitespace-nowrap";
-                }
-            });
-            document.getElementById('titulo-vitrine').innerText = cat === 'todos' ? "Todos os Departamentos" : `Departamento: ${cat}`;
+        carrinho = [];
+        salvarCarrinho();
+        executarFiltrosCombinados();
+        await abrirPedidos(criados);
+        triggerToast('Pedido confirmado!', 'A filial já recebeu a ordem de separação.', 'success');
+    } catch (err) {
+        triggerToast('Não foi possível finalizar', err.message, 'warning');
+        // O estoque pode ter mudado: atualiza o catálogo para o cliente ajustar o carrinho.
+        if (err.status === 409) {
+            await carregarDadosBackend();
+            renderizarCarrinho();
             executarFiltrosCombinados();
         }
+    } finally {
+        finalizando = false;
+        botao.disabled = false;
+    }
+}
 
-        function filtrarPorPreco(range) {
-            filtroPrecoAtivo = range;
-            executarFiltrosCombinados();
+// ---------------------------------------------------------------------------
+// Meus pedidos
+// ---------------------------------------------------------------------------
+function guardarPedidosLocais(ids) {
+    const atuais = lerStorage(localStorage, CHAVE_PEDIDOS, []);
+    const todos = [...new Set([...(Array.isArray(atuais) ? atuais : []), ...ids])];
+    gravarStorage(localStorage, CHAVE_PEDIDOS, todos.slice(-50));
+}
+
+async function abrirPedidos(pedidosJaCarregados) {
+    mudarAba('pedidos');
+    await carregarPedidosCliente(true, pedidosJaCarregados);
+}
+
+async function abrirMeusPedidos() {
+    pedidosNovos = [];
+    await abrirPedidos();
+}
+
+async function carregarPedidosCliente(mostrarAviso, jaCarregados = []) {
+    const mapa = new Map(jaCarregados.map((o) => [o.id, o]));
+
+    try {
+        if (sessao && sessao.user.role === 'cliente') {
+            const minhas = await apiFetch('/api/orders/mine');
+            (minhas.orders || []).forEach((o) => mapa.set(o.id, o));
         }
 
-        function filtrarPorNome() {
-            // Quem digita na busca estando na pagina do produto ou carrinho volta para a vitrine.
-            const abaDetalhe = document.getElementById('aba-detalhe');
-            const abaCarrinho = document.getElementById('aba-carrinho');
-            if ((abaDetalhe && !abaDetalhe.classList.contains('hidden')) || (abaCarrinho && !abaCarrinho.classList.contains('hidden'))) {
-                mudarAba('vitrine');
-            }
-            executarFiltrosCombinados();
-        }
-
-        // S2-11: busca sem diferenciar maiusculas nem acentos ("eletronicos" acha "Eletrônicos").
-        function normalizarTexto(texto) {
-            return String(texto)
-                .toLowerCase()
-                .normalize('NFD')
-                .replace(/[\u0300-\u036f]/g, '');
-        }
-
-        function produtoCombinaComBusca(produto, termos) {
-            const textoDoProduto = normalizarTexto(
-                `${produto.nome} ${produto.categoria} ${produto.sku} ${produto.barcode}`
-            );
-            return termos.every(termo => textoDoProduto.includes(termo));
-        }
-
-        const ORDENACOES_VITRINE = {
-            'menor-preco': (a, b) => a.preco - b.preco,
-            'maior-preco': (a, b) => b.preco - a.preco,
-            'nome': (a, b) => a.nome.localeCompare(b.nome, 'pt-BR'),
-            'estoque': (a, b) => (b.estoques[lojaAtiva.id] || 0) - (a.estoques[lojaAtiva.id] || 0)
-        };
-
-        function limparFiltrosVitrine() {
-            document.getElementById('input-busca').value = '';
-            document.getElementById('filtro-com-estoque').checked = false;
-            document.getElementById('ordenacao-vitrine').value = 'padrao';
-            document.querySelector('input[name="filtro-preco"][value="todos"]').checked = true;
-            filtroPrecoAtivo = 'todos';
-            filtrarCategoria('todos');
-        }
-
-        function executarFiltrosCombinados() {
-            let resultado = dbProdutos;
-            if (categoriaAtiva !== 'todos') {
-                resultado = resultado.filter(p => p.categoria === categoriaAtiva);
-            }
-            if (filtroPrecoAtivo === 'ate500') {
-                resultado = resultado.filter(p => p.preco <= 500);
-            } else if (filtroPrecoAtivo === 'de500a2000') {
-                resultado = resultado.filter(p => p.preco > 500 && p.preco <= 2000);
-            } else if (filtroPrecoAtivo === 'acima2000') {
-                resultado = resultado.filter(p => p.preco > 2000);
-            }
-            const termos = normalizarTexto(document.getElementById('input-busca').value)
-                .split(/\s+/)
-                .filter(Boolean);
-            if (termos.length > 0) {
-                resultado = resultado.filter(p => produtoCombinaComBusca(p, termos));
-            }
-            if (document.getElementById('filtro-com-estoque').checked) {
-                resultado = resultado.filter(p => (p.estoques[lojaAtiva.id] || 0) > 0);
-            }
-            const comparar = ORDENACOES_VITRINE[document.getElementById('ordenacao-vitrine').value];
-            if (comparar) {
-                resultado = [...resultado].sort(comparar);
-            }
-            renderizarVitrine(resultado);
-        }
-
-        // =====================================================================
-        // ROTEAMENTO DINÂMICO (ROTA DO CLIENTE VS ROTA DO OPERADOR/ADMIN)
-        // =====================================================================
-        function obterRotaDaUrl() {
-            const path = window.location.pathname.toLowerCase();
-            const hash = window.location.hash.toLowerCase();
-            const search = new URLSearchParams(window.location.search);
-            const paramRota = search.get('rota')?.toLowerCase();
-
-            if (path.includes('/operador') || path.includes('/balcao') || path.includes('/admin') ||
-                hash.includes('operador') || hash.includes('balcao') || hash.includes('admin') ||
-                paramRota === 'operador' || paramRota === 'balcao' || paramRota === 'admin') {
-                return 'operador';
-            }
-            return 'cliente';
-        }
-
-        function navegarPara(rota, atualizarHistorico = true) {
-            const destino = (rota === '/operador' || rota === 'operador' || rota === '/balcao' || rota === '/admin')
-                ? 'operador'
-                : 'cliente';
-
-            rotaAtual = destino;
-
-            const pillCliente = document.getElementById('pill-rota-cliente');
-            const pillOperador = document.getElementById('pill-rota-operador');
-            const headerCliente = document.getElementById('header-cliente');
-            const headerOperador = document.getElementById('header-operador');
-            const banner = document.getElementById('wrapper-banner');
-
-            if (destino === 'operador') {
-                // Atualiza abas institucionais da barra superior
-                if (pillOperador && pillCliente) {
-                    pillOperador.className = "px-2.5 py-1 rounded-lg font-bold transition-all flex items-center gap-1.5 bg-amber-400 text-slate-950 shadow-sm";
-                    pillCliente.className = "px-2.5 py-1 rounded-lg font-bold transition-all flex items-center gap-1.5 text-blue-200 hover:text-white";
-                }
-
-                // Exibe cabeçalho exclusivo do operador
-                headerCliente?.classList.add('hidden');
-                headerOperador?.classList.remove('hidden');
-                banner?.classList.add('hidden');
-
-                // Oculta abas do cliente
-                ['vitrine', 'detalhe', 'carrinho', 'sucesso'].forEach(aba => {
-                    document.getElementById(`aba-${aba}`)?.classList.add('hidden');
-                });
-
-                // Verifica se operador está autenticado
-                if (operadorLogado) {
-                    document.getElementById('aba-login-operador')?.classList.add('hidden');
-                    document.getElementById('aba-balcao')?.classList.remove('hidden');
-                    atualizarInterfaceOperador();
-                    recarregarPedidosBalcao();
-                } else {
-                    document.getElementById('aba-balcao')?.classList.add('hidden');
-                    document.getElementById('aba-login-operador')?.classList.remove('hidden');
-                }
-
-                if (atualizarHistorico) {
-                    try {
-                        if (!isFileProtocol) {
-                            window.history.pushState({ rota: 'operador' }, '', '/operador');
-                        } else {
-                            window.location.hash = '/operador';
-                        }
-                    } catch (e) {
-                        // Modo estático seguro
-                    }
-                }
-            } else {
-                // Destino: Rota do Cliente
-                if (pillCliente && pillOperador) {
-                    pillCliente.className = "px-2.5 py-1 rounded-lg font-bold transition-all flex items-center gap-1.5 bg-white text-blue-950 shadow-sm";
-                    pillOperador.className = "px-2.5 py-1 rounded-lg font-bold transition-all flex items-center gap-1.5 text-blue-200 hover:text-white";
-                }
-
-                // Exibe cabeçalho do cliente e oculta o do operador
-                headerOperador?.classList.add('hidden');
-                headerCliente?.classList.remove('hidden');
-                banner?.classList.remove('hidden');
-
-                // Oculta abas do operador
-                document.getElementById('aba-login-operador')?.classList.add('hidden');
-                document.getElementById('aba-balcao')?.classList.add('hidden');
-
-                // Exibe a aba ativa do cliente
-                mudarAba(pedidoAtivo ? 'sucesso' : 'vitrine');
-
-                if (atualizarHistorico) {
-                    try {
-                        if (!isFileProtocol) {
-                            window.history.pushState({ rota: 'cliente' }, '', '/cliente');
-                        } else {
-                            window.location.hash = '/cliente';
-                        }
-                    } catch (e) {
-                        // Modo estático seguro
-                    }
-                }
-            }
-
-            window.scrollTo({ top: 0, behavior: 'smooth' });
-        }
-
-        // Retrocompatibilidade
-        function alternarAtor(ator) {
-            if (ator === 'balcao' || ator === 'operador') {
-                navegarPara('/operador');
-            } else {
-                navegarPara('/cliente');
-            }
-        }
-
-        function mudarAba(destino) {
-            ['vitrine', 'detalhe', 'carrinho', 'sucesso', 'balcao', 'login-operador'].forEach(aba => {
-                document.getElementById(`aba-${aba}`)?.classList.add('hidden');
-            });
-            document.getElementById(`aba-${destino}`)?.classList.remove('hidden');
-            window.scrollTo({ top: 0, behavior: 'smooth' });
-        }
-
-        // =====================================================================
-        // CONTROLE DE ACESSO DO OPERADOR (ADMIN / BALCÃO)
-        // =====================================================================
-        function realizarLoginOperador(event) {
-            if (event) event.preventDefault();
-            const user = document.getElementById('op-login-user')?.value.trim();
-            const pass = document.getElementById('op-login-pass')?.value;
-            const filialId = document.getElementById('op-login-filial')?.value;
-
-            if (!user || !pass) {
-                triggerToast("Atenção", "Preencha o usuário e a senha do operador.", "warning");
-                return;
-            }
-
-            operadorLogado = {
-                usuario: user,
-                nome: user.toLowerCase() === 'admin' ? 'Administrador Central' : 'Murilo Alves',
-                matricula: user.toLowerCase() === 'admin' ? 'ADM-001' : 'OP-2024',
-                perfil: user.toLowerCase() === 'admin' ? 'Administrador' : 'Operador de Balcão',
-                filialId: parseInt(filialId || '1', 10)
-            };
-
-            try {
-                sessionStorage.setItem('megaloja_operador', JSON.stringify(operadorLogado));
-            } catch (e) {}
-
-            triggerToast("Acesso Autorizado", `Bem-vindo ao Balcão, ${operadorLogado.nome}!`, "success");
-            navegarPara('/operador', false);
-        }
-
-        function logoutOperador() {
-            operadorLogado = null;
-            try {
-                sessionStorage.removeItem('megaloja_operador');
-            } catch (e) {}
-            triggerToast("Sessão Encerrada", "Operador desconectado com sucesso.", "warning");
-            navegarPara('/operador', false);
-        }
-
-        function atualizarInterfaceOperador() {
-            if (!operadorLogado) return;
-            const badgeNome = document.getElementById('txt-operador-nome-badge');
-            const badgeMat = document.getElementById('txt-operador-matricula');
-            const navLojaOp = document.getElementById('nav-loja-operador-nome');
-
-            if (badgeNome) badgeNome.innerText = `${operadorLogado.perfil}: ${operadorLogado.nome}`;
-            if (badgeMat) badgeMat.innerText = `Matrícula: ${operadorLogado.matricula}`;
-            if (navLojaOp) navLojaOp.innerText = lojaAtiva.nome.replace('MegaLoja - Filial ', '');
-        }
-
-        // =====================================================================
-        // AUTENTICAÇÃO DO CLIENTE (LOGIN & SENHA / CADASTRO)
-        // =====================================================================
-        function abrirModalAuthCliente(tab = 'login') {
-            const modal = document.getElementById('modal-auth-cliente');
-            const content = document.getElementById('modal-auth-content');
-            if (!modal) return;
-            alternarTabAuthCliente(tab);
-            modal.classList.remove('hidden');
-            setTimeout(() => {
-                modal.classList.remove('opacity-0');
-                content?.classList.remove('scale-95');
-            }, 15);
-        }
-
-        function fecharModalAuthCliente() {
-            const modal = document.getElementById('modal-auth-cliente');
-            const content = document.getElementById('modal-auth-content');
-            if (!modal) return;
-            modal.classList.add('opacity-0');
-            content?.classList.add('scale-95');
-            setTimeout(() => modal.classList.add('hidden'), 200);
-        }
-
-        function alternarTabAuthCliente(tab) {
-            const tabLogin = document.getElementById('tab-auth-login');
-            const tabCadastro = document.getElementById('tab-auth-cadastro');
-            const formLogin = document.getElementById('form-auth-login');
-            const formCadastro = document.getElementById('form-auth-cadastro');
-
-            if (!tabLogin || !tabCadastro) return;
-
-            if (tab === 'login') {
-                tabLogin.className = "flex-1 py-3 text-center border-b-2 border-blue-600 text-blue-600 bg-white transition-all flex items-center justify-center gap-1.5";
-                tabCadastro.className = "flex-1 py-3 text-center border-b-2 border-transparent text-gray-500 hover:text-gray-800 transition-all flex items-center justify-center gap-1.5";
-                formLogin?.classList.remove('hidden');
-                formCadastro?.classList.add('hidden');
-            } else {
-                tabCadastro.className = "flex-1 py-3 text-center border-b-2 border-emerald-600 text-emerald-600 bg-white transition-all flex items-center justify-center gap-1.5";
-                tabLogin.className = "flex-1 py-3 text-center border-b-2 border-transparent text-gray-500 hover:text-gray-800 transition-all flex items-center justify-center gap-1.5";
-                formCadastro?.classList.remove('hidden');
-                formLogin?.classList.add('hidden');
-            }
-        }
-
-        function executarLoginCliente(event) {
-            if (event) event.preventDefault();
-            const usuario = document.getElementById('cli-login-usuario')?.value.trim();
-            const senha = document.getElementById('cli-login-senha')?.value;
-
-            if (!usuario || !senha) {
-                triggerToast("Atenção", "Preencha o e-mail/CPF e a senha.", "warning");
-                return;
-            }
-
-            let cadastros = [];
-            try {
-                cadastros = JSON.parse(localStorage.getItem('megaloja_cadastros') || '[]');
-            } catch (e) {}
-
-            const contaEncontrada = cadastros.find(c =>
-                (c.email && c.email.toLowerCase() === usuario.toLowerCase()) ||
-                (c.cpf && c.cpf === usuario)
-            );
-
-            if (contaEncontrada) {
-                clienteLogado = {
-                    nome: contaEncontrada.nome,
-                    cpf: contaEncontrada.cpf,
-                    email: contaEncontrada.email,
-                    telefone: contaEncontrada.telefone
-                };
-            } else {
-                clienteLogado = {
-                    nome: usuario.includes('@') ? usuario.split('@')[0] : 'Cliente MegaLoja',
-                    email: usuario.includes('@') ? usuario : 'cliente@unilasalle.edu.br',
-                    cpf: usuario.includes('@') ? '123.456.789-00' : usuario,
-                    telefone: '(51) 99887-6655'
-                };
-            }
-
-            try {
-                localStorage.setItem('megaloja_cliente', JSON.stringify(clienteLogado));
-            } catch (e) {}
-
-            atualizarInterfaceCliente();
-            fecharModalAuthCliente();
-            triggerToast("Login Concluído", `Bem-vindo de volta, ${clienteLogado.nome}!`, "success");
-        }
-
-        function executarCadastroCliente(event) {
-            if (event) event.preventDefault();
-            const nome = document.getElementById('cli-cad-nome')?.value.trim();
-            const cpf = document.getElementById('cli-cad-cpf')?.value.trim();
-            const telefone = document.getElementById('cli-cad-telefone')?.value.trim();
-            const email = document.getElementById('cli-cad-email')?.value.trim();
-            const senha = document.getElementById('cli-cad-senha')?.value;
-            const senhaConf = document.getElementById('cli-cad-senha-conf')?.value;
-
-            if (!nome || !cpf || !email || !senha) {
-                triggerToast("Atenção", "Preencha todos os campos obrigatórios.", "warning");
-                return;
-            }
-
-            if (senha !== senhaConf) {
-                triggerToast("Erro no Cadastro", "A confirmação de senha não coincide com a senha digitada.", "warning");
-                return;
-            }
-
-            clienteLogado = { nome, cpf, telefone, email };
-
-            try {
-                const cadastros = JSON.parse(localStorage.getItem('megaloja_cadastros') || '[]');
-                cadastros.push({ ...clienteLogado, senha });
-                localStorage.setItem('megaloja_cadastros', JSON.stringify(cadastros));
-                localStorage.setItem('megaloja_cliente', JSON.stringify(clienteLogado));
-            } catch (e) {}
-
-            atualizarInterfaceCliente();
-            fecharModalAuthCliente();
-            triggerToast("Cadastro Realizado", `Conta criada com sucesso! Bem-vindo, ${clienteLogado.nome}.`, "success");
-        }
-
-        function logoutCliente() {
-            clienteLogado = null;
-            try {
-                localStorage.removeItem('megaloja_cliente');
-            } catch (e) {}
-            atualizarInterfaceCliente();
-            triggerToast("Sessão Finalizada", "Você desconectou da sua conta de cliente.", "warning");
-        }
-
-        function atualizarInterfaceCliente() {
-            const boxDeslogado = document.getElementById('auth-cliente-deslogado');
-            const boxLogado = document.getElementById('auth-cliente-logado');
-            const navNome = document.getElementById('nav-cliente-nome');
-            const menuEmail = document.getElementById('menu-cliente-email');
-            const menuCpf = document.getElementById('menu-cliente-cpf');
-
-            if (clienteLogado) {
-                boxDeslogado?.classList.add('hidden');
-                boxLogado?.classList.remove('hidden');
-                if (navNome) navNome.innerText = clienteLogado.nome.split(' ')[0] || clienteLogado.nome;
-                if (menuEmail) menuEmail.innerText = clienteLogado.email || '---';
-                if (menuCpf) menuCpf.innerText = `CPF: ${clienteLogado.cpf || '---'}`;
-
-                // Preenche campos do checkout com dados do cliente
-                const inputNome = document.getElementById('chk-nome-cliente');
-                const inputCpf = document.getElementById('chk-cpf-cliente');
-                if (inputNome && !inputNome.value) inputNome.value = clienteLogado.nome;
-                if (inputCpf && !inputCpf.value) inputCpf.value = clienteLogado.cpf;
-            } else {
-                boxLogado?.classList.add('hidden');
-                boxDeslogado?.classList.remove('hidden');
-            }
-        }
-
-        function abrirMeusPedidos() {
-            if (pedidoAtivo) {
-                mudarAba('sucesso');
-            } else {
-                triggerToast("Meus Pedidos", "Você ainda não possui pedidos em andamento nesta sessão.", "warning");
-                mudarAba('vitrine');
-            }
-        }
-
-        function abrirCarrinho() {
-            triggerToast("Carrinho Click & Collect", "Selecione qualquer produto na vitrine para comprar e retirar na filial com frete grátis!", "success");
-        }
-
-        // Modal de Filiais (RF001)
-        function abrirModalLoja() {
-            const m = document.getElementById('modal-loja');
-            const c = document.getElementById('modal-content');
-            m.classList.remove('hidden');
-            setTimeout(() => { m.classList.remove('opacity-0'); c.classList.remove('scale-95'); }, 15);
-        }
-
-        function fecharModalLoja() {
-            const m = document.getElementById('modal-loja');
-            const c = document.getElementById('modal-content');
-            m.classList.add('opacity-0'); c.classList.add('scale-95');
-            setTimeout(() => m.classList.add('hidden'), 200);
-        }
-
-        function renderizarLojasModal() {
-            const cid = document.getElementById('seletor-cidade').value;
-            const box = document.getElementById('box-lista-lojas');
-            box.innerHTML = '';
-
-            const lojasCidade = dbLojas[cid] || [];
-            lojasCidade.forEach(l => {
-                const isChecked = l.id === lojaTemp.id;
-                const div = document.createElement('div');
-                div.className = `border p-3 rounded-xl flex items-center justify-between cursor-pointer transition-all ${isChecked ? 'border-blue-600 bg-blue-50/50' : 'border-gray-200 hover:bg-gray-50'}`;
-                div.onclick = () => { lojaTemp = l; renderizarLojasModal(); };
-
-                div.innerHTML = `
-                    <div>
-                        <p class="text-xs font-bold text-gray-900">${l.nome}</p>
-                        <p class="text-[10px] text-gray-500">${l.endereco}</p>
-                    </div>
-                    <div class="w-4 h-4 rounded-full border flex items-center justify-center ${isChecked ? 'border-blue-600' : 'border-gray-300'}">
-                        <div class="w-2 h-2 rounded-full ${isChecked ? 'bg-blue-600' : 'bg-transparent'}"></div>
-                    </div>
-                `;
-                box.appendChild(div);
+        const idsLocais = lerStorage(localStorage, CHAVE_PEDIDOS, []);
+        const faltando = (Array.isArray(idsLocais) ? idsLocais : []).filter((id) => !mapa.has(id));
+        const resultados = await Promise.allSettled(faltando.map((id) => apiFetch(`/api/orders/${id}`)));
+        resultados.forEach((r) => {
+            if (r.status === 'fulfilled') mapa.set(r.value.order.id, r.value.order);
+        });
+        // Pedidos já carregados também ganham o status mais recente.
+        if (jaCarregados.length > 0) {
+            const atualizados = await Promise.allSettled(jaCarregados.map((o) => apiFetch(`/api/orders/${o.id}`)));
+            atualizados.forEach((r) => {
+                if (r.status === 'fulfilled') mapa.set(r.value.order.id, r.value.order);
             });
         }
+    } catch (err) {
+        triggerToast('Não foi possível carregar os pedidos', err.message, 'warning');
+    }
 
-        function salvarEscolhaLoja() {
-            lojaAtiva = lojaTemp;
-            fecharModalLoja();
-            atualizarLayoutFocoLoja();
-            executarFiltrosCombinados();
-            recarregarPedidosBalcao();
-            triggerToast("Filial Atualizada (RF001)", `Unidade ativa definida para: ${lojaAtiva.nome}`, "success");
-        }
+    renderizarPedidos([...mapa.values()].sort((a, b) => b.id - a.id));
+    if (mostrarAviso && pedidosNovos.length > 0) {
+        const aviso = document.getElementById('aviso-pedido-novo');
+        document.getElementById('texto-pedido-novo').textContent =
+            pedidosNovos.length === 1
+                ? 'Compra finalizada! Seu pedido foi enviado para separação.'
+                : `Compra finalizada! Seus ${pedidosNovos.length} itens foram enviados para separação.`;
+        aviso.classList.remove('hidden');
+    } else if (mostrarAviso) {
+        document.getElementById('aviso-pedido-novo').classList.add('hidden');
+    }
+}
 
-        function atualizarLayoutFocoLoja() {
-            const nomeCurto = lojaAtiva.nome.replace('MegaLoja - Filial ', '');
-            const elNav = document.getElementById('nav-loja-nome');
-            const elStatus = document.getElementById('txt-status-loja-nome');
-            const elBalcao = document.getElementById('txt-balcao-loja-nome');
-            const elNavOp = document.getElementById('nav-loja-operador-nome');
+function renderizarPedidos(pedidos) {
+    const lista = document.getElementById('lista-pedidos');
+    lista.replaceChildren();
+    document.getElementById('pedidos-vazio').classList.toggle('hidden', pedidos.length > 0);
 
-            if (elNav) elNav.innerText = nomeCurto;
-            if (elStatus) elStatus.innerText = lojaAtiva.nome;
-            if (elBalcao) elBalcao.innerText = lojaAtiva.nome;
-            if (elNavOp) elNavOp.innerText = nomeCurto;
+    pedidos.forEach((p) => {
+        const st = infoStatus(p.status);
+        const pronto = p.status === 'pronto_retirada';
+        const entregue = p.status === 'entregue_cliente' || p.status === 'retirado';
+        const cancelado = p.status.startsWith('cancelado');
+        const novo = pedidosNovos.includes(p.id);
 
-            if (!produtoSelecionado) return;
+        const card = document.createElement('article');
+        card.className = `bg-white rounded-2xl border shadow-sm overflow-hidden ${novo ? 'border-emerald-300 ring-2 ring-emerald-100' : 'border-gray-200'}`;
+        card.innerHTML = `
+            <div class="flex flex-wrap items-center justify-between gap-2 px-5 py-3 border-b border-gray-100 bg-gray-50">
+                <div>
+                    <h3 class="text-sm font-black text-gray-900">Pedido #${String(p.id).padStart(4, '0')}</h3>
+                    <p class="text-[10px] text-gray-500">${esc(new Date(p.created_at + 'Z').toLocaleString('pt-BR'))}</p>
+                </div>
+                <span class="text-xs font-bold px-3 py-1 rounded-full border ${st.classe}">${esc(st.rotulo)}</span>
+            </div>
+            <div class="p-5 grid grid-cols-1 sm:grid-cols-3 gap-5 items-center">
+                <dl class="sm:col-span-2 text-xs space-y-2">
+                    <div class="flex justify-between gap-3"><dt class="text-gray-500">Produto</dt><dd class="font-bold text-gray-800 text-right">${p.quantity}x ${esc(p.product_name)}</dd></div>
+                    <div class="flex justify-between gap-3"><dt class="text-gray-500">Retirar em</dt><dd class="font-bold text-gray-800 text-right">${esc(p.store_name || 'Filial')}</dd></div>
+                    <div class="flex justify-between gap-3"><dt class="text-gray-500">Titular</dt><dd class="font-bold text-gray-800 text-right">${esc(p.customer_name)}${p.customer_cpf ? ` (${esc(p.customer_cpf)})` : ''}</dd></div>
+                    ${p.third_party_name ? `<div class="flex justify-between gap-3"><dt class="text-gray-500">Retira por você</dt><dd class="font-bold text-blue-700 text-right">${esc(p.third_party_name)} (${esc(p.third_party_cpf || '')})</dd></div>` : ''}
+                    <p class="text-[11px] text-gray-500 pt-1 border-t border-gray-100">${esc(mensagemStatus(p.status))}</p>
+                </dl>
+                ${cancelado ? '' : `
+                <div class="flex flex-col items-center gap-2 ${pronto ? '' : 'opacity-60'}">
+                    <div class="w-32 h-32 bg-white border border-gray-200 p-2 rounded-xl relative flex items-center justify-center">
+                        ${pronto
+                            ? `<img src="https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=${encodeURIComponent(p.pickup_code || '')}" alt="QR Code de retirada do pedido ${p.id}" class="w-full h-full object-contain">`
+                            : `<div class="text-center text-[10px] text-gray-500 leading-tight px-2"><i class="fa-solid ${entregue ? 'fa-circle-check text-emerald-600' : 'fa-lock text-amber-500'} text-lg block mb-1"></i>${entregue ? 'Retirada concluída' : 'Liberado após a separação'}</div>`}
+                    </div>
+                    ${pronto ? `<span class="text-[11px] font-mono font-bold tracking-wider bg-gray-50 border border-gray-300 rounded-lg px-2 py-1">${esc(p.pickup_code || '')}</span>` : ''}
+                </div>`}
+            </div>`;
+        lista.appendChild(card);
+    });
+}
 
-            const estoqueFisico = produtoSelecionado.estoques[lojaAtiva.id] || 0;
-            const statusInfo = document.getElementById('txt-status-loja-info');
-            const badgeEstoque = document.getElementById('badge-estoque-status');
+function mensagemStatus(status) {
+    switch (status) {
+        case 'aguardando_separacao':
+        case 'aguardando_preparacao':
+            return 'A equipe da filial está separando o seu item. Você verá o QR Code aqui assim que ficar pronto.';
+        case 'pronto_retirada':
+            return 'Pronto! Vá até a filial com este QR Code e um documento com foto.';
+        case 'entregue_cliente':
+        case 'retirado':
+            return 'Retirada concluída na filial. Obrigado pela compra!';
+        case 'cancelado_ruptura':
+            return 'O item não estava na prateleira. O pedido foi cancelado e o estorno foi solicitado ao cartão.';
+        case 'cancelado_expirado':
+            return 'O prazo de retirada terminou. O pedido foi cancelado e o estorno foi solicitado.';
+        default:
+            return 'Pedido cancelado.';
+    }
+}
 
-            if (estoqueFisico > 0) {
-                statusInfo.className = "text-[11px] font-semibold text-emerald-600";
-                statusInfo.innerHTML = `<i class="fa-solid fa-circle-check"></i> Estoque Confirmado Local (${estoqueFisico} un.)`;
-                badgeEstoque.className = "text-[10px] font-bold px-2 py-1 rounded bg-emerald-100 text-emerald-800";
-                badgeEstoque.innerText = "Estoque OK";
-            } else {
-                statusInfo.className = "text-[11px] font-semibold text-red-600";
-                statusInfo.innerHTML = `<i class="fa-solid fa-circle-xmark"></i> Indisponível nesta filial física`;
-                badgeEstoque.className = "text-[10px] font-bold px-2 py-1 rounded bg-red-100 text-red-800";
-                badgeEstoque.innerText = "Sem Estoque";
-            }
-        }
+// ---------------------------------------------------------------------------
+// Conta do cliente (login e cadastro pelo Supabase Auth, via API)
+// ---------------------------------------------------------------------------
+function abrirModalAuthCliente(tab = 'login') {
+    const modal = document.getElementById('modal-auth-cliente');
+    const content = document.getElementById('modal-auth-content');
+    alternarTabAuthCliente(tab);
+    modal.classList.remove('hidden');
+    setTimeout(() => {
+        modal.classList.remove('opacity-0');
+        content.classList.remove('scale-95');
+        document.getElementById(tab === 'login' ? 'cli-login-email' : 'cli-cad-nome')?.focus();
+    }, 15);
+}
 
-        function toggleCamposTerceiro() {
-            const habilitado = document.getElementById('chk-habilitar-terceiro').checked;
-            document.getElementById('box-terceiro').classList.toggle('hidden', !habilitado);
-        }
+function fecharModalAuthCliente() {
+    const modal = document.getElementById('modal-auth-cliente');
+    const content = document.getElementById('modal-auth-content');
+    if (modal.classList.contains('hidden')) return;
+    modal.classList.add('opacity-0');
+    content.classList.add('scale-95');
+    setTimeout(() => modal.classList.add('hidden'), 200);
+}
 
-        // =====================================================================
-        // EXECUÇÃO DO CASO DE USO 1: UC003 - FINALIZAR COMPRA
-        // =====================================================================
-        async function executarCheckoutUC003() {
-            if (!produtoSelecionado) {
-                triggerToast("Seleção Obrigatória", "Selecione um produto na vitrine.", "warning");
-                return;
-            }
+function alternarTabAuthCliente(tab) {
+    const tabLogin = document.getElementById('tab-auth-login');
+    const tabCadastro = document.getElementById('tab-auth-cadastro');
+    const ativo = 'flex-1 py-3 text-center border-b-2 bg-white transition-all flex items-center justify-center gap-1.5';
+    const inativo = 'flex-1 py-3 text-center border-b-2 border-transparent text-gray-500 hover:text-gray-800 transition-all flex items-center justify-center gap-1.5';
 
-            const nomeCliente = document.getElementById('chk-nome-cliente').value.trim();
-            const cpfCliente = document.getElementById('chk-cpf-cliente').value.trim();
-            const simularRecusa = document.getElementById('chk-simular-recusa').checked;
-            const numeroCartao = document.getElementById('chk-cartao-numero').value.trim();
+    document.getElementById('erro-auth-login').classList.add('hidden');
+    document.getElementById('erro-auth-cadastro').classList.add('hidden');
 
-            const comTerceiro = document.getElementById('chk-habilitar-terceiro').checked;
-            const nomeTerceiro = comTerceiro ? document.getElementById('chk-nome-terceiro').value.trim() : null;
-            const cpfTerceiro = comTerceiro ? document.getElementById('chk-cpf-terceiro').value.trim() : null;
+    if (tab === 'login') {
+        tabLogin.className = `${ativo} border-blue-600 text-blue-600`;
+        tabCadastro.className = inativo;
+    } else {
+        tabCadastro.className = `${ativo} border-emerald-600 text-emerald-600`;
+        tabLogin.className = inativo;
+    }
+    document.getElementById('form-auth-login').classList.toggle('hidden', tab !== 'login');
+    document.getElementById('form-auth-cadastro').classList.toggle('hidden', tab === 'login');
+}
 
-            if (!nomeCliente || !cpfCliente) {
-                triggerToast("Dados Incompletos", "Preencha o nome e CPF do titular.", "warning");
-                return;
-            }
+function mostrarErroAuth(id, mensagem) {
+    const el = document.getElementById(id);
+    el.textContent = mensagem;
+    el.classList.remove('hidden');
+}
 
-            if (comTerceiro && (!nomeTerceiro || !cpfTerceiro)) {
-                triggerToast("Dados do Terceiro", "Preencha o nome e CPF do terceiro autorizado.", "warning");
-                return;
-            }
+function iniciarSessao(payload) {
+    if (payload.user.role !== 'cliente') {
+        throw new Error('Esta é uma conta de colaborador. Use o portal em /operador.');
+    }
+    sessao = { access_token: payload.access_token, user: payload.user };
+    gravarStorage(localStorage, CHAVE_SESSAO, sessao);
+    atualizarInterfaceCliente();
+}
 
-            try {
-                // UC003 invoca o ControladorPedido no Backend
-                const payload = {
-                    customer_name: nomeCliente,
-                    customer_cpf: cpfCliente,
-                    delivery_method: "retirar_na_loja",
-                    store_id: lojaAtiva.id,
-                    product_id: produtoSelecionado.id,
-                    quantity: 1,
-                    card_number: numeroCartao,
-                    simulate_payment_failure: simularRecusa,
-                    third_party_name: nomeTerceiro,
-                    third_party_cpf: cpfTerceiro
-                };
+function encerrarSessaoLocal() {
+    sessao = null;
+    gravarStorage(localStorage, CHAVE_SESSAO, null);
+    atualizarInterfaceCliente();
+}
 
-                const resp = await apiFetch('/api/orders', {
-                    method: 'POST',
-                    body: JSON.stringify(payload)
-                });
+async function executarLoginCliente(event) {
+    event.preventDefault();
+    const botao = document.getElementById('btn-auth-login');
+    botao.disabled = true;
+    try {
+        const payload = await apiFetch('/api/auth/login', {
+            method: 'POST',
+            body: JSON.stringify({
+                email: document.getElementById('cli-login-email').value.trim(),
+                password: document.getElementById('cli-login-senha').value,
+                portal: 'cliente',
+            }),
+        });
+        iniciarSessao(payload);
+        document.getElementById('cli-login-senha').value = '';
+        fecharModalAuthCliente();
+        triggerToast('Login concluído', `Bem-vindo, ${sessao.user.name}!`, 'success');
+    } catch (err) {
+        mostrarErroAuth('erro-auth-login', err.message);
+    } finally {
+        botao.disabled = false;
+    }
+}
 
-                pedidoAtivo = resp.order;
-                atualizarTelaSucessoComprovante(pedidoAtivo);
-                const badge = document.getElementById('nav-carrinho-badge');
-                if (badge) badge.innerText = '0';
-                mudarAba('sucesso');
-                triggerToast("Pedido Confirmado!", "Ordem de separação enviada ao operador da filial (UC004).", "success");
-                await recarregarPedidosBalcao();
+async function executarCadastroCliente(event) {
+    event.preventDefault();
+    const senha = document.getElementById('cli-cad-senha').value;
+    if (senha !== document.getElementById('cli-cad-senha-conf').value) {
+        mostrarErroAuth('erro-auth-cadastro', 'A confirmação de senha não coincide com a senha digitada.');
+        return;
+    }
 
-                // Atualiza estoque local na memória
-                if (produtoSelecionado.estoques[lojaAtiva.id] > 0) {
-                    produtoSelecionado.estoques[lojaAtiva.id] -= 1;
-                    atualizarLayoutFocoLoja();
-                }
-            } catch (err) {
-                // Fluxo Alternativo 5.1.5.2 (Recusa) ou 5.1.5.1 (Estoque indisponível)
-                triggerToast("Atenção no Checkout", err.message, "warning");
-            }
-        }
+    const botao = document.getElementById('btn-auth-cadastro');
+    botao.disabled = true;
+    try {
+        const payload = await apiFetch('/api/auth/register', {
+            method: 'POST',
+            body: JSON.stringify({
+                name: document.getElementById('cli-cad-nome').value.trim(),
+                cpf: document.getElementById('cli-cad-cpf').value.trim(),
+                phone: document.getElementById('cli-cad-telefone').value.trim(),
+                email: document.getElementById('cli-cad-email').value.trim(),
+                password: senha,
+            }),
+        });
+        iniciarSessao(payload);
+        document.getElementById('form-auth-cadastro').reset();
+        fecharModalAuthCliente();
+        triggerToast('Conta criada', `Bem-vindo, ${sessao.user.name}!`, 'success');
+    } catch (err) {
+        mostrarErroAuth('erro-auth-cadastro', err.message);
+    } finally {
+        botao.disabled = false;
+    }
+}
 
-        function atualizarTelaSucessoComprovante(pedido) {
-            document.getElementById('txt-sucesso-id').innerText = `PEDIDO #${String(pedido.id).padStart(4, '0')}`;
-            document.getElementById('resumo-filial').innerText = pedido.store_name || lojaAtiva.nome;
-            document.getElementById('resumo-produto').innerText = `${pedido.quantity}x ${pedido.product_name}`;
-            document.getElementById('resumo-titular').innerText = `${pedido.customer_name} (${pedido.customer_cpf || 'CPF informado'})`;
+function logoutCliente() {
+    encerrarSessaoLocal();
+    document.getElementById('chk-nome-cliente').value = '';
+    document.getElementById('chk-cpf-cliente').value = '';
+    triggerToast('Sessão encerrada', 'Você saiu da sua conta.', 'warning');
+    if (abaAtual === 'pedidos') carregarPedidosCliente(false);
+}
 
-            const linhaTerceiro = document.getElementById('linha-resumo-terceiro');
-            if (pedido.third_party_name) {
-                linhaTerceiro.classList.remove('hidden');
-                document.getElementById('resumo-terceiro').innerText = `${pedido.third_party_name} (CPF: ${pedido.third_party_cpf})`;
-            } else {
-                linhaTerceiro.classList.add('hidden');
-            }
+function atualizarInterfaceCliente() {
+    const logado = Boolean(sessao);
+    document.getElementById('auth-cliente-deslogado').classList.toggle('hidden', logado);
+    document.getElementById('auth-cliente-logado').classList.toggle('hidden', !logado);
+    if (!logado) return;
 
-            configurarLayoutStatusCliente(pedido.status, pedido.pickup_code);
-        }
-
-        function configurarLayoutStatusCliente(status, pickupCode) {
-            const badge = document.getElementById('badge-status-cliente');
-            const txtStatus = document.getElementById('txt-status-cliente');
-            const txtInstrucao = document.getElementById('txt-instrucao-cliente');
-            const wrap = document.getElementById('wrapper-qrcode');
-            const overlay = document.getElementById('overlay-qr');
-            const token = document.getElementById('txt-token-numerico');
-            const imgQr = document.getElementById('img-qrcode');
-
-            if (status === 'aguardando_separacao' || status === 'aguardando_preparacao') {
-                badge.className = "bg-amber-50 text-amber-800 text-xs font-bold px-3 py-1.5 rounded-full border border-amber-200 flex items-center gap-2";
-                txtStatus.innerText = "Aguardando Separação Física";
-                txtInstrucao.innerText = "O estoquista da filial está coletando os itens nas prateleiras físicas.";
-                wrap.classList.add('opacity-60');
-                overlay.classList.remove('hidden');
-                token.innerText = "••••-••••";
-                imgQr.src = "https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=PENDENTE";
-            }
-            else if (status === 'pronto_retirada') {
-                badge.className = "bg-emerald-50 text-emerald-800 text-xs font-bold px-3 py-1.5 rounded-full border border-emerald-200 flex items-center gap-2";
-                txtStatus.innerText = "Pronto para Retirada no Balcão";
-                txtInstrucao.innerText = "Separação física concluída! Dirija-se à filial escolhida com este QR Code e seu documento com foto.";
-                wrap.classList.remove('opacity-60');
-                overlay.classList.add('hidden');
-                token.innerText = pickupCode || "HV-0000-0000";
-                imgQr.src = `https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=${encodeURIComponent(pickupCode || 'VOUCHER')}`;
-            }
-            else if (status === 'entregue_cliente' || status === 'retirado') {
-                badge.className = "bg-emerald-100 text-emerald-900 text-xs font-bold px-3 py-1.5 rounded-full border border-emerald-300 flex items-center gap-2";
-                txtStatus.innerText = "Pedido Entregue com Sucesso";
-                txtInstrucao.innerText = "Baixa final efetuada presencialmente no balcão da filial.";
-                wrap.classList.add('opacity-40');
-                overlay.classList.add('hidden');
-                token.innerText = "BAIXA FINALIZADA";
-            }
-            else if (status === 'cancelado_ruptura') {
-                badge.className = "bg-rose-50 text-rose-800 text-xs font-bold px-3 py-1.5 rounded-full border border-rose-200 flex items-center gap-2";
-                txtStatus.innerText = "Cancelado por Ruptura de Estoque (UC008)";
-                txtInstrucao.innerText = "O item não estava disponível na prateleira física. Solicitação de estorno enviada à operadora de cartão.";
-                wrap.classList.add('opacity-40');
-                overlay.classList.remove('hidden');
-                token.innerText = "ESTORNO SOLICITADO";
-            }
-            else {
-                badge.className = "bg-gray-100 text-gray-800 text-xs font-bold px-3 py-1.5 rounded-full border border-gray-300 flex items-center gap-2";
-                txtStatus.innerText = "Cancelado / Expirado";
-                txtInstrucao.innerText = "O pedido atingiu o prazo limite ou foi cancelado.";
-            }
-        }
-
-        // =====================================================================
-        // PAINEL DO OPERADOR DE BALCÃO (UC005, UC007, UC008)
-        // =====================================================================
-        async function recarregarPedidosBalcao() {
-            try {
-                const resp = await apiFetch(`/api/orders?store_id=${lojaAtiva.id}`);
-                pedidosBalcao = resp.orders || [];
-
-                const pendentes = pedidosBalcao.filter(o => o.status === 'aguardando_separacao' || o.status === 'aguardando_preparacao');
-                const prontos = pedidosBalcao.filter(o => o.status === 'pronto_retirada');
-
-                document.getElementById('badge-contador-separacao').innerText = `${pendentes.length} pendentes`;
-                document.getElementById('badge-contador-prontos').innerText = `${prontos.length} prontos`;
-
-                // Popula select de separação (UC005)
-                const selectSep = document.getElementById('select-pedido-separacao');
-                selectSep.innerHTML = '';
-                if (pendentes.length === 0) {
-                    selectSep.innerHTML = '<option value="">Nenhum pedido aguardando separação nesta filial</option>';
-                    pedidoSeparacaoSelecionado = null;
-                } else {
-                    pendentes.forEach(p => {
-                        const opt = document.createElement('option');
-                        opt.value = p.id;
-                        opt.innerText = `Pedido #${String(p.id).padStart(4, '0')} • ${p.product_name} (${p.quantity} un.)`;
-                        selectSep.appendChild(opt);
-                    });
-                    pedidoSeparacaoSelecionado = pendentes[0];
-                }
-                atualizarCardSeparacao();
-            } catch (err) {
-                console.warn("Falha ao recarregar pedidos do balcão:", err);
-            }
-        }
-
-        function selecionarPedidoParaSeparar() {
-            const id = parseInt(document.getElementById('select-pedido-separacao').value);
-            pedidoSeparacaoSelecionado = pedidosBalcao.find(p => p.id === id) || null;
-            atualizarCardSeparacao();
-        }
-
-        function atualizarCardSeparacao() {
-            const p = pedidoSeparacaoSelecionado;
-            if (!p) {
-                document.getElementById('sep-prod-nome').innerText = "Nenhum pedido selecionado";
-                document.getElementById('sep-prod-qtd').innerText = "-";
-                document.getElementById('sep-prod-sku').innerText = "---";
-                document.getElementById('sep-prod-barcode').innerText = "---";
-                return;
-            }
-            document.getElementById('sep-prod-nome').innerText = p.product_name;
-            document.getElementById('sep-prod-qtd').innerText = `${p.quantity} un.`;
-            document.getElementById('sep-prod-sku').innerText = p.product_sku || "SKU-PADRAO";
-            document.getElementById('sep-prod-barcode').innerText = p.product_barcode || "7891000";
-        }
-
-        function preencherSkuTeste() {
-            if (!pedidoSeparacaoSelecionado) return;
-            document.getElementById('input-leitor-sku').value = pedidoSeparacaoSelecionado.product_sku || pedidoSeparacaoSelecionado.product_barcode;
-            triggerToast("Leitura Simulada", "Código de barras óptico lido com sucesso.", "success");
-        }
-
-        // Executar UC005: Concluir Separação
-        async function executarSeparacaoUC005() {
-            if (!pedidoSeparacaoSelecionado) {
-                triggerToast("Atenção", "Selecione um pedido pendente para separar.", "warning");
-                return;
-            }
-
-            const barcodeOuSku = document.getElementById('input-leitor-sku').value.trim();
-            if (!barcodeOuSku) {
-                triggerToast("Conferência Obrigatória", "Informe o código de barras ou SKU do item coletado (Fluxo 5.2.4).", "warning");
-                return;
-            }
-
-            try {
-                const resp = await apiFetch(`/api/orders/${pedidoSeparacaoSelecionado.id}/separate`, {
-                    method: 'POST',
-                    body: JSON.stringify({ barcode_or_sku: barcodeOuSku })
-                });
-
-                triggerToast("Separação Concluída (UC005)", "Voucher digital único gerado e liberado ao cliente.", "success");
-                document.getElementById('input-leitor-sku').value = '';
-                
-                // Se for o pedido ativo do cliente aberto, atualiza a tela
-                if (pedidoAtivo && pedidoAtivo.id === resp.order.id) {
-                    pedidoAtivo = resp.order;
-                    configurarLayoutStatusCliente(pedidoAtivo.status, pedidoAtivo.pickup_code);
-                }
-
-                await recarregarPedidosBalcao();
-            } catch (err) {
-                triggerToast("Erro na Conferência (UC005)", err.message, "warning");
-            }
-        }
-
-        // Executar UC008: Ruptura de Estoque
-        async function executarRupturaUC008() {
-            if (!pedidoSeparacaoSelecionado) {
-                triggerToast("Atenção", "Selecione um pedido para registrar a ruptura.", "warning");
-                return;
-            }
-
-            const motivo = prompt("Motivo da indisponibilidade física na prateleira:", "Falta de item na prateleira física (ruptura)");
-            if (!motivo) return;
-
-            try {
-                const resp = await apiFetch(`/api/orders/${pedidoSeparacaoSelecionado.id}/rupture`, {
-                    method: 'POST',
-                    body: JSON.stringify({ reason: motivo })
-                });
-
-                triggerToast("Ruptura Registrada (UC008)", "Pedido cancelado e solicitação de estorno emitida à operadora.", "warning");
-                if (pedidoAtivo && pedidoAtivo.id === resp.order.id) {
-                    pedidoAtivo = resp.order;
-                    configurarLayoutStatusCliente(pedidoAtivo.status, null, null);
-                }
-                await recarregarPedidosBalcao();
-            } catch (err) {
-                triggerToast("Erro ao Registrar Ruptura", err.message, "warning");
-            }
-        }
-
-        // Localizar Pedido para Retirada (Voucher ou Busca Manual)
-        function localizarPedidoRetirada(modo) {
-            let pedido = null;
-
-            if (modo === 'voucher') {
-                const voucher = document.getElementById('input-busca-voucher').value.trim();
-                if (!voucher) {
-                    triggerToast("Campo Vazio", "Informe o código do voucher.", "warning");
-                    return;
-                }
-                pedido = pedidosBalcao.find(o => o.pickup_code && o.pickup_code.toUpperCase() === voucher.toUpperCase());
-            } else {
-                const cpf = document.getElementById('input-busca-cpf').value.trim();
-                if (!cpf) {
-                    triggerToast("Campo Vazio", "Informe o CPF para busca manual (Fluxo 5.3.5.2).", "warning");
-                    return;
-                }
-                pedido = pedidosBalcao.find(o => 
-                    (o.customer_cpf && o.customer_cpf.includes(cpf)) ||
-                    (o.third_party_cpf && o.third_party_cpf.includes(cpf))
-                );
-            }
-
-            if (!pedido) {
-                triggerToast("Não Localizado", "Nenhum pedido pronto para retirada encontrado para estes dados.", "warning");
-                pedidoRetiradaLocalizado = null;
-                atualizarCardConferenciaRetirada();
-                return;
-            }
-
-            pedidoRetiradaLocalizado = pedido;
-            atualizarCardConferenciaRetirada();
-            triggerToast("Pedido Localizado (UC007)", `Pedido #${pedido.id} encontrado. Confira a documentação.`, "success");
-        }
-
-        function atualizarCardConferenciaRetirada() {
-            const p = pedidoRetiradaLocalizado;
-            const alertaTerceiro = document.getElementById('alerta-terceiro-balcao');
-
-            if (!p) {
-                document.getElementById('ret-pedido-id').innerText = "Nenhum pedido localizado";
-                document.getElementById('ret-titular-dados').innerText = "Titular: ---";
-                alertaTerceiro.classList.add('hidden');
-                document.getElementById('chk-doc-conferido').checked = false;
-                return;
-            }
-
-            document.getElementById('ret-pedido-id').innerText = `Pedido #${String(p.id).padStart(4, '0')} • ${p.product_name}`;
-            document.getElementById('ret-titular-dados').innerText = `Titular Cadastrado: ${p.customer_name} (CPF: ${p.customer_cpf || '---'})`;
-
-            if (p.third_party_name) {
-                alertaTerceiro.classList.remove('hidden');
-                document.getElementById('ret-terceiro-dados').innerText = `${p.third_party_name} — CPF: ${p.third_party_cpf}`;
-            } else {
-                alertaTerceiro.classList.add('hidden');
-            }
-        }
-
-        // Executar UC007: Validar Retirada Presencial
-        async function executarBaixaUC007() {
-            if (!pedidoRetiradaLocalizado) {
-                triggerToast("Atenção", "Localize um pedido pronto para entrega antes de dar baixa.", "warning");
-                return;
-            }
-
-            const docConferido = document.getElementById('chk-doc-conferido').checked;
-            if (!docConferido) {
-                triggerToast("Segurança Obrigatória", "Confira a documentação física com foto antes de validar a entrega (Fluxo 5.3.4).", "warning");
-                return;
-            }
-
-            const ehTerceiro = !!pedidoRetiradaLocalizado.third_party_name;
-
-            try {
-                const resp = await apiFetch('/api/orders/validate-pickup', {
-                    method: 'POST',
-                    body: JSON.stringify({
-                        order_id: pedidoRetiradaLocalizado.id,
-                        document_checked: true,
-                        is_third_party: ehTerceiro
-                    })
-                });
-
-                triggerToast("Entrega Concluída (UC007)", "Baixa presencial confirmada com sucesso!", "success");
-
-                if (pedidoAtivo && pedidoAtivo.id === resp.order.id) {
-                    pedidoAtivo = resp.order;
-                    configurarLayoutStatusCliente(pedidoAtivo.status, pedidoAtivo.pickup_code);
-                }
-
-                pedidoRetiradaLocalizado = null;
-                atualizarCardConferenciaRetirada();
-                document.getElementById('input-busca-voucher').value = '';
-                document.getElementById('input-busca-cpf').value = '';
-                await recarregarPedidosBalcao();
-            } catch (err) {
-                triggerToast("Erro na Validação (UC007)", err.message, "warning");
-            }
-        }
-
-        // Simulação de Abandono (7 dias)
-        async function simularAbandonoPedido() {
-            if (!pedidoRetiradaLocalizado) {
-                triggerToast("Atenção", "Localize um pedido no balcão para simular a expiração por abandono.", "warning");
-                return;
-            }
-
-            if (!confirm(`Simular abandono de 7 dias para o Pedido #${pedidoRetiradaLocalizado.id}? O item retornará ao estoque e a compra será cancelada.`)) {
-                return;
-            }
-
-            try {
-                const resp = await apiFetch(`/api/orders/${pedidoRetiradaLocalizado.id}/expire`, {
-                    method: 'POST'
-                });
-
-                triggerToast("Regra de Abandono", "Pedido expirado. Item retornado à prateleira e estorno efetuado.", "warning");
-                if (pedidoAtivo && pedidoAtivo.id === resp.order.id) {
-                    pedidoAtivo = resp.order;
-                    configurarLayoutStatusCliente(pedidoAtivo.status, null, null);
-                }
-                pedidoRetiradaLocalizado = null;
-                atualizarCardConferenciaRetirada();
-                await recarregarPedidosBalcao();
-            } catch (err) {
-                triggerToast("Erro na Operação", err.message, "warning");
-            }
-        }
-
-        // Toast de Notificação
-        function triggerToast(title, text, type) {
-            const toast = document.getElementById('toast');
-            const bg = document.getElementById('toast-icon-bg');
-            const ic = document.getElementById('toast-icon');
-
-            document.getElementById('toast-title').innerText = title;
-            document.getElementById('toast-msg').innerText = text;
-
-            if (type === 'success') {
-                bg.className = "p-1 rounded bg-emerald-500 text-white text-xs flex items-center justify-center w-6 h-6";
-                ic.className = "fa-solid fa-circle-check";
-            } else {
-                bg.className = "p-1 rounded bg-amber-500 text-slate-900 text-xs flex items-center justify-center w-6 h-6";
-                ic.className = "fa-solid fa-triangle-exclamation";
-            }
-
-            toast.classList.remove('translate-y-24', 'opacity-0');
-            setTimeout(() => toast.classList.add('translate-y-24', 'opacity-0'), 3500);
-        }
+    const { name, email, cpf } = sessao.user;
+    document.getElementById('nav-cliente-nome').innerText = (name || '').split(' ')[0] || name;
+    document.getElementById('menu-cliente-email').innerText = email || '---';
+    document.getElementById('menu-cliente-cpf').innerText = `CPF: ${cpf || '---'}`;
+    preencherDadosDoTitular();
+}
