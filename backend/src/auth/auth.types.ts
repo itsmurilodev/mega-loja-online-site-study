@@ -1,9 +1,13 @@
-export type UserRole = "cliente" | "operador" | "empresa";
+export type UserRole = "cliente" | "operador" | "gerente" | "empresa";
 
-export const USER_ROLES: readonly UserRole[] = ["cliente", "operador", "empresa"];
+export const USER_ROLES: readonly UserRole[] = ["cliente", "operador", "gerente", "empresa"];
 
-/** Papéis que podem entrar no portal do operador (/operador). */
-export const STAFF_ROLES: readonly UserRole[] = ["operador", "empresa"];
+/** Papéis que podem entrar no portal do operador (/operador). S3-16: gerente autoriza cancelamentos. */
+export const STAFF_ROLES: readonly UserRole[] = [
+  "operador",
+  "gerente",
+  "empresa",
+];
 
 export interface AuthUser {
   id: string;

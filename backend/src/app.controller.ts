@@ -64,7 +64,7 @@ export class AppController {
   }
 
   @Get("api/health")
-  getHealth() {
+  async getHealth() {
     return this.appService.getHealth();
   }
 

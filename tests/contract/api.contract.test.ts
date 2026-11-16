@@ -5,10 +5,18 @@
  * (local, Preview ou producao). Variaveis:
  *
  *   API_URL                endereco da API (padrao http://127.0.0.1:5000)
- *   API_TOKEN              token de login de um operador ou da empresa (S3-14).
+ *   API_TOKEN              token de login de um OPERADOR (S3-14 / S3-16).
  *                          Sem ele, os testes que usam endpoints do operador sao
  *                          pulados e so a protecao (401) e conferida.
- *   CONTRACT_WRITE=1       libera os fluxos que criam pedidos no banco (exige API_TOKEN)
+ *   API_TOKEN_GERENTE      token de um GERENTE ou da empresa: cancelar pedidos e
+ *                          liberar reservas vencidas (S3-16 / S3-24).
+ *   API_TOKEN_EMPRESA      token da empresa (opcional; consulta do log geral).
+ *   CONTRACT_WRITE=1       libera os fluxos que criam pedidos no banco (exige API_TOKEN
+ *                          e API_TOKEN_GERENTE)
+ *
+ * Recursos que dependem da migracao SQL 001 (janela de retirada, entrega, Pix,
+ * transferencia, auditoria) sao pulados enquanto GET /api/health informar
+ * migracao_001 = false.
  *   CONTRACT_DESTRUCTIVE=1 libera o teste de ruptura, que ZERA o estoque do
  *                          produto na filial usada (so em banco descartavel)
  */
@@ -17,7 +25,11 @@ import { beforeAll, describe, expect, it } from "vitest";
 const API_URL = (process.env.API_URL ?? "http://127.0.0.1:5000").replace(/\/+$/, "");
 const API_TOKEN = process.env.API_TOKEN ?? "";
 const temToken = API_TOKEN.length > 0;
-const podeEscrever = process.env.CONTRACT_WRITE === "1" && temToken;
+const API_TOKEN_GERENTE = process.env.API_TOKEN_GERENTE ?? "";
+const temGerente = API_TOKEN_GERENTE.length > 0;
+const API_TOKEN_EMPRESA = process.env.API_TOKEN_EMPRESA ?? "";
+const temEmpresa = API_TOKEN_EMPRESA.length > 0;
+const podeEscrever = process.env.CONTRACT_WRITE === "1" && temToken && temGerente;
 const podeDestruir = process.env.CONTRACT_DESTRUCTIVE === "1";
 
 const ID_INEXISTENTE = 99999999;
@@ -54,6 +66,33 @@ async function chamar(
 }
 
 const get = (caminho: string) => chamar("GET", caminho);
+const comoGerente = (metodo: string, caminho: string, corpo?: unknown) =>
+  chamar(metodo, caminho, corpo, API_TOKEN_GERENTE);
+
+/** Migracao SQL 001 aplicada? (definido no beforeAll) */
+// Lido na coleta (antes dos testes) para o skipIf enxergar o valor.
+let migrado = { orders_extra: false, audit_log: false };
+try {
+  const saude = await (await fetch(`${API_URL}/api/health`)).json();
+  migrado = saude.migracao_001 ?? migrado;
+} catch {
+  // API fora do ar: os testes que dependem dela falham por conta propria.
+}
+const temExtras = () => migrado.orders_extra;
+const temAuditoria = () => migrado.audit_log;
+
+/** S3-18: pede o codigo de confirmacao do terceiro (envio simulado). */
+async function codigoDoTerceiro(cpfTitular: string, cpfTerceiro: string): Promise<string> {
+  const { status, body } = await chamar(
+    "POST",
+    "/api/orders/third-party-code",
+    { customer_cpf: cpfTitular, third_party_cpf: cpfTerceiro, email: "titular@megaloja.invalid" },
+    null
+  );
+  expect(status).toBe(201);
+  expect(body.confirmation.code, "CODIGO_TERCEIRO_EM_RESPOSTA=false: o teste precisa do codigo").toMatch(/^\d{6}$/);
+  return body.confirmation.code;
+}
 const post = (caminho: string, corpo: unknown = {}) => chamar("POST", caminho, corpo);
 
 function esperarErro(resposta: Resposta, statusEsperado: number): void {
@@ -456,7 +495,7 @@ describe.skipIf(!podeEscrever)("Fluxos que gravam pedidos (CONTRACT_WRITE=1)", (
     });
 
     it("abandono: expirar cancela o pedido e devolve o estoque", async () => {
-      const { status, body } = await post(`/api/orders/${pedidoId}/expire`);
+      const { status, body } = await comoGerente("POST", `/api/orders/${pedidoId}/expire`);
       expect(status).toBe(200);
       expect(body.order.status).toBe("cancelado_expirado");
       expect(body.order.refund_requested).toBe(1);
@@ -468,7 +507,7 @@ describe.skipIf(!podeEscrever)("Fluxos que gravam pedidos (CONTRACT_WRITE=1)", (
         await post("/api/orders/validate-pickup", { pickup_code: voucher, document_checked: true }),
         409
       );
-      esperarErro(await post(`/api/orders/${pedidoId}/expire`), 409);
+      esperarErro(await comoGerente("POST", `/api/orders/${pedidoId}/expire`), 409);
     });
   });
 
@@ -476,9 +515,14 @@ describe.skipIf(!podeEscrever)("Fluxos que gravam pedidos (CONTRACT_WRITE=1)", (
     let voucher: string;
 
     it("compra com terceiro autorizado e separa o pedido", async () => {
+      const codigo = await codigoDoTerceiro(CPF_TITULAR, "555.666.777-88");
       const compra = await post(
         "/api/orders",
-        pedidoValido({ third_party_name: "Terceiro de Teste", third_party_cpf: "555.666.777-88" })
+        pedidoValido({
+          third_party_name: "Terceiro de Teste",
+          third_party_cpf: "555.666.777-88",
+          third_party_code: codigo,
+        })
       );
       expect(compra.status).toBe(201);
       expect(compra.body.order.third_party_name).toBe("Terceiro de Teste");
@@ -508,8 +552,6 @@ describe.skipIf(!podeEscrever)("Fluxos que gravam pedidos (CONTRACT_WRITE=1)", (
     });
   });
 
-  // S3-14: hoje os endpoints do operador respondem 200 sem credencial.
-  it.todo("S3-14: separar pedido sem credencial de operador responde 401 ou 403");
 });
 
 describe.skipIf(!podeEscrever || !podeDestruir)(
@@ -540,3 +582,428 @@ describe.skipIf(!podeEscrever || !podeDestruir)(
     });
   }
 );
+
+// ---------------------------------------------------------------------------
+// Sprint 3: recursos novos
+// ---------------------------------------------------------------------------
+
+// S3-16: operador separa e da baixa; cancelar e com gerente/empresa.
+describe.skipIf(!podeEscrever)("Perfis operador e gerente (S3-16)", () => {
+  let pedidoId: number;
+
+  it("cria um pedido para os testes de perfil", async () => {
+    const compra = await post("/api/orders", pedidoValido());
+    expect(compra.status).toBe(201);
+    pedidoId = compra.body.order.id;
+  });
+
+  it("operador NAO cancela: POST /expire responde 403", async () => {
+    esperarErro(await post(`/api/orders/${pedidoId}/expire`), 403);
+  });
+
+  it("operador NAO cancela: PATCH status cancelado responde 403", async () => {
+    esperarErro(await chamar("PATCH", `/api/orders/${pedidoId}/status`, { status: "cancelado" }), 403);
+  });
+
+  it("operador NAO libera reservas vencidas (403)", async () => {
+    esperarErro(await post("/api/orders/expire-overdue"), 403);
+  });
+
+  it("gerente cancela e o estoque volta", async () => {
+    const antes = await consultarEstoque(alvo.lojaId, alvo.produto.id);
+    const { status, body } = await comoGerente("POST", `/api/orders/${pedidoId}/expire`);
+    expect(status).toBe(200);
+    expect(body.order.status).toBe("cancelado_expirado");
+    expect(await consultarEstoque(alvo.lojaId, alvo.produto.id)).toBe(antes + 1);
+  });
+});
+
+// S3-18: indicar terceiro exige o codigo de confirmacao (simulado por e-mail).
+describe("Terceiro com codigo de confirmacao (S3-18)", () => {
+  const TERCEIRO_CPF = "555.666.777-88";
+
+  it("pedir o codigo com CPF invalido responde 400", async () => {
+    esperarErro(
+      await chamar("POST", "/api/orders/third-party-code", { customer_cpf: "1", third_party_cpf: "2" }, null),
+      400
+    );
+  });
+
+  it("o titular nao pode ser o proprio terceiro (400)", async () => {
+    esperarErro(
+      await chamar(
+        "POST",
+        "/api/orders/third-party-code",
+        { customer_cpf: CPF_TITULAR, third_party_cpf: CPF_TITULAR },
+        null
+      ),
+      400
+    );
+  });
+
+  it("indicar terceiro sem o codigo e recusado (403) e nao reserva estoque", async () => {
+    const antes = await consultarEstoque(alvo.lojaId, alvo.produto.id);
+    esperarErro(
+      await post("/api/orders", pedidoValido({ third_party_name: "Fulano", third_party_cpf: TERCEIRO_CPF })),
+      403
+    );
+    expect(await consultarEstoque(alvo.lojaId, alvo.produto.id)).toBe(antes);
+  });
+
+  it("codigo errado e recusado (403)", async () => {
+    const certo = await codigoDoTerceiro(CPF_TITULAR, TERCEIRO_CPF);
+    const errado = certo === "000000" ? "111111" : "000000";
+    esperarErro(
+      await post(
+        "/api/orders",
+        pedidoValido({ third_party_name: "Fulano", third_party_cpf: TERCEIRO_CPF, third_party_code: errado })
+      ),
+      403
+    );
+  });
+
+  it("o codigo de outro terceiro nao vale (403)", async () => {
+    const codigoOutro = await codigoDoTerceiro(CPF_TITULAR, "999.888.777-66");
+    esperarErro(
+      await post(
+        "/api/orders",
+        pedidoValido({ third_party_name: "Fulano", third_party_cpf: TERCEIRO_CPF, third_party_code: codigoOutro })
+      ),
+      403
+    );
+  });
+
+  it("terceiro so com nome (sem CPF) responde 400", async () => {
+    esperarErro(await post("/api/orders", pedidoValido({ third_party_name: "Fulano" })), 400);
+  });
+});
+
+// S3-23: Pix simulado e pagamento dividido.
+describe("Pix e meios combinados (S3-23)", () => {
+  it("POST /api/payments/pix gera cobranca com copia e cola e validade", async () => {
+    const { status, body } = await chamar("POST", "/api/payments/pix", { amount: 10.5 }, null);
+    expect(status).toBe(201);
+    expect(body.pix).toMatchObject({
+      amount: 10.5,
+      simulated: true,
+      expires_in_seconds: 300,
+      txid: expect.stringMatching(/^PIX[0-9A-F]+$/),
+    });
+    expect(body.pix.copia_e_cola.length).toBeGreaterThan(20);
+    expect(body.pix.token).toContain(".");
+  });
+
+  it("Pix com valor invalido responde 400", async () => {
+    esperarErro(await chamar("POST", "/api/payments/pix", { amount: 0 }, null), 400);
+  });
+
+  it("Pix expirado e recusado (402) e nao reserva estoque", async () => {
+    const quote = await chamar(
+      "POST",
+      "/api/orders/quote",
+      {
+        customer_name: "Cliente Teste",
+        store_id: alvo.lojaId,
+        items: [{ product_id: alvo.produto.id, quantity: 1 }],
+      },
+      null
+    );
+    expect(quote.status).toBe(200);
+    const pix = await chamar("POST", "/api/payments/pix", { amount: quote.body.total, ttl_seconds: 1 }, null);
+    await new Promise((resolver) => setTimeout(resolver, 2200));
+    const antes = await consultarEstoque(alvo.lojaId, alvo.produto.id);
+    esperarErro(
+      await post("/api/orders", pedidoValido({ payment: { methods: [{ type: "pix", pix_token: pix.body.pix.token }] } })),
+      402
+    );
+    expect(await consultarEstoque(alvo.lojaId, alvo.produto.id)).toBe(antes);
+  });
+
+  it("Pix adulterado responde 400", async () => {
+    const pix = await chamar("POST", "/api/payments/pix", { amount: 1 }, null);
+    const [corpo, assinatura] = pix.body.pix.token.split(".");
+    const adulterado = Buffer.from(
+      JSON.stringify({ ...JSON.parse(Buffer.from(corpo, "base64url").toString()), a: 1 })
+    ).toString("base64url");
+    esperarErro(
+      await post(
+        "/api/orders",
+        pedidoValido({ payment: { methods: [{ type: "pix", pix_token: `${adulterado}.${assinatura}` }] } })
+      ),
+      400
+    );
+  });
+
+  it("a soma dos meios diferente do total responde 400", async () => {
+    esperarErro(
+      await post(
+        "/api/orders",
+        pedidoValido({
+          payment: {
+            methods: [
+              { type: "cartao", card_number: "4111 1111 1111 1234", amount: 1 },
+              { type: "cartao", card_number: "5500 0000 0000 0004", amount: 1 },
+            ],
+          },
+        })
+      ),
+      400
+    );
+  });
+
+  it("mais de dois meios responde 400", async () => {
+    const cartao = { type: "cartao", card_number: "4111 1111 1111 1234", amount: 1 };
+    esperarErro(await post("/api/orders", pedidoValido({ payment: { methods: [cartao, cartao, cartao] } })), 400);
+  });
+
+  describe.skipIf(!podeEscrever)("compra paga (grava pedidos; o Pix exige a migracao 001)", () => {
+    it.skipIf(!temExtras())("cartao + Pix: soma o total, aprova e o Pix nao pode ser reutilizado", async () => {
+      const quote = await chamar(
+        "POST",
+        "/api/orders/quote",
+        { customer_name: "Cliente Teste", store_id: alvo.lojaId, items: [{ product_id: alvo.produto.id, quantity: 1 }] },
+        null
+      );
+      const total: number = quote.body.total;
+      const parteCartao = Math.round((total / 2) * 100) / 100;
+      const partePix = Math.round((total - parteCartao) * 100) / 100;
+      const pix = await chamar("POST", "/api/payments/pix", { amount: partePix }, null);
+      const pagamento = {
+        methods: [
+          { type: "cartao", card_number: "4111 1111 1111 1234", amount: parteCartao },
+          { type: "pix", pix_token: pix.body.pix.token, amount: partePix },
+        ],
+      };
+
+      const compra = await post("/api/orders", pedidoValido({ payment: pagamento }));
+      expect(compra.status).toBe(201);
+      expect(compra.body.order.payment_method).toBe("cartao+pix");
+      expect(JSON.stringify(compra.body)).not.toContain("4111 1111 1111");
+
+      esperarErro(await post("/api/orders", pedidoValido({ payment: pagamento })), 409);
+      await comoGerente("POST", `/api/orders/${compra.body.order.id}/expire`);
+    });
+  });
+});
+
+// S3-24: reserva com prazo; vencida devolve a quantidade.
+describe.skipIf(!podeEscrever)("Reserva com prazo (S3-24)", () => {
+  it("o pedido novo informa ate quando a reserva vale e a rotina devolve o estoque", async () => {
+    const compra = await post("/api/orders", pedidoValido());
+    expect(compra.status).toBe(201);
+    const limite = new Date(`${compra.body.order.reserved_until}Z`).getTime();
+    const esperado = new Date(`${compra.body.order.created_at}Z`).getTime() + 48 * 3600_000;
+    expect(Math.abs(limite - esperado)).toBeLessThan(60_000);
+
+    const antes = await consultarEstoque(alvo.lojaId, alvo.produto.id);
+    const liberar = await comoGerente("POST", `/api/orders/expire-overdue?order_id=${compra.body.order.id}&hours=0`);
+    expect(liberar.status).toBe(200);
+    expect(liberar.body.expired.map((o: any) => o.id)).toEqual([compra.body.order.id]);
+    expect(liberar.body.expired[0].status).toBe("cancelado_expirado");
+    expect(liberar.body.expired[0].cancellation_reason).toContain("Reserva vencida");
+    expect(await consultarEstoque(alvo.lojaId, alvo.produto.id)).toBe(antes + 1);
+  });
+
+  it("rodar de novo nao devolve o estoque duas vezes", async () => {
+    const compra = await post("/api/orders", pedidoValido());
+    const id = compra.body.order.id;
+    await comoGerente("POST", `/api/orders/expire-overdue?order_id=${id}&hours=0`);
+    const depoisDe1 = await consultarEstoque(alvo.lojaId, alvo.produto.id);
+    const segunda = await comoGerente("POST", `/api/orders/expire-overdue?order_id=${id}&hours=0`);
+    expect(segunda.body.expired).toEqual([]);
+    expect(await consultarEstoque(alvo.lojaId, alvo.produto.id)).toBe(depoisDe1);
+  });
+
+  it("pedido dentro do prazo nao e liberado pela rotina normal", async () => {
+    const compra = await post("/api/orders", pedidoValido());
+    const id = compra.body.order.id;
+    const liberar = await comoGerente("POST", `/api/orders/expire-overdue?order_id=${id}`);
+    expect(liberar.status).toBe(200);
+    expect(liberar.body.expired).toEqual([]);
+    const { body } = await get(`/api/orders/${id}`);
+    expect(body.order.status).toBe("aguardando_separacao");
+    await comoGerente("POST", `/api/orders/${id}/expire`);
+  });
+
+  it("hours sem order_id responde 400", async () => {
+    esperarErro(await comoGerente("POST", "/api/orders/expire-overdue?hours=0"), 400);
+  });
+});
+
+// S3-25: de onde o item pode vir quando a filial nao tem.
+describe("Transferencia entre filiais / CD (S3-25)", () => {
+  it("GET transfer-options lista origens com estoque e novo prazo", async () => {
+    const outraLoja = (await get("/api/stores")).body.stores.find((l: any) => l.id !== alvo.lojaId);
+    expect(outraLoja).toBeTruthy();
+    const { status, body } = await get(
+      `/api/stores/${outraLoja.id}/transfer-options?product_id=${alvo.produto.id}&quantity=1`
+    );
+    expect(status).toBe(200);
+    expect(Array.isArray(body.options)).toBe(true);
+    for (const opcao of body.options) {
+      expect(opcao).toMatchObject({
+        store_id: expect.any(Number),
+        name: expect.any(String),
+        available: expect.any(Number),
+        eta_days: expect.any(Number),
+      });
+      expect(opcao.store_id).not.toBe(outraLoja.id);
+      expect(opcao.available).toBeGreaterThanOrEqual(1);
+    }
+  });
+
+  it("transfer-options sem product_id responde 400", async () => {
+    esperarErro(await get("/api/stores/1/transfer-options"), 400);
+  });
+});
+
+// ---- Recursos que dependem da migracao SQL 001 -----------------------------
+
+describe.skipIf(!podeEscrever)("Com a migracao 001: janela, entrega, transferencia e auditoria", () => {
+  const amanhaBrasilia = () => new Date(Date.now() - 3 * 3600_000 + 24 * 3600_000).toISOString().slice(0, 10);
+  const criados: number[] = [];
+
+  async function limpar() {
+    for (const id of criados) await comoGerente("POST", `/api/orders/${id}/expire`);
+    criados.length = 0;
+  }
+
+  // S3-22
+  it.skipIf(!temExtras())("S3-22: lista as janelas do dia com capacidade e ocupacao", async () => {
+    const { status, body } = await get(`/api/orders/pickup-slots?store_id=${alvo.lojaId}&date=${amanhaBrasilia()}`);
+    expect(status).toBe(200);
+    expect(body.slots.length).toBe(12);
+    expect(body.slots[0]).toMatchObject({ used: expect.any(Number), capacity: body.capacity, past: false });
+  });
+
+  it.skipIf(!temExtras())("S3-22: janela salva no pedido, conta na ocupacao e ordena a fila", async () => {
+    const dia = amanhaBrasilia();
+    const antes = (await get(`/api/orders/pickup-slots?store_id=${alvo.lojaId}&date=${dia}`)).body.slots;
+    const tarde = await post("/api/orders", pedidoValido({ pickup_slot: `${dia}T16:00` }));
+    const cedo = await post("/api/orders", pedidoValido({ pickup_slot: `${dia}T09:00` }));
+    expect(tarde.status).toBe(201);
+    expect(cedo.status).toBe(201);
+    criados.push(tarde.body.order.id, cedo.body.order.id);
+    expect(cedo.body.order.pickup_slot).toBe(`${dia}T09:00`);
+
+    const depois = (await get(`/api/orders/pickup-slots?store_id=${alvo.lojaId}&date=${dia}`)).body.slots;
+    const uso = (lista: any[], hora: string) => lista.find((s) => s.slot === `${dia}T${hora}`).used;
+    expect(uso(depois, "09:00")).toBe(uso(antes, "09:00") + 1);
+    expect(uso(depois, "16:00")).toBe(uso(antes, "16:00") + 1);
+
+    const fila = (await get(`/api/orders?store_id=${alvo.lojaId}&status=aguardando_separacao`)).body.orders;
+    const posicao = (id: number) => fila.findIndex((o: any) => o.id === id);
+    expect(posicao(cedo.body.order.id)).toBeLessThan(posicao(tarde.body.order.id));
+    await limpar();
+  });
+
+  it.skipIf(!temExtras())("S3-22: janela no passado ou fora do horario responde 400", async () => {
+    esperarErro(await post("/api/orders", pedidoValido({ pickup_slot: "2020-01-01T10:00" })), 400);
+    esperarErro(await post("/api/orders", pedidoValido({ pickup_slot: `${amanhaBrasilia()}T23:00` })), 400);
+    esperarErro(await post("/api/orders", pedidoValido({ pickup_slot: "amanha de manha" })), 400);
+  });
+
+  // S3-20
+  it.skipIf(!temExtras())("S3-20: carrinho misto cria os dois tipos e o balcao so ve a retirada", async () => {
+    const compra = await post("/api/orders/checkout", {
+      customer_name: "Cliente Teste de Contrato",
+      customer_cpf: CPF_TITULAR,
+      store_id: alvo.lojaId,
+      shipping_address: "Rua do Teste, 100 - Canoas/RS",
+      items: [
+        { product_id: alvo.produto.id, quantity: 1, delivery: "retirar_na_loja" },
+        { product_id: alvo.produto.id, quantity: 1, delivery: "entrega_padrao" },
+      ],
+      card_number: "4111 1111 1111 1234",
+    });
+    expect(compra.status).toBe(201);
+    expect(compra.body.orders).toHaveLength(2);
+    const retirada = compra.body.orders.find((o: any) => o.delivery_method === "retirar_na_loja");
+    const entrega = compra.body.orders.find((o: any) => o.delivery_method === "entrega_padrao");
+    expect(entrega.shipping_address).toBe("Rua do Teste, 100 - Canoas/RS");
+    expect(entrega.shipping_cost).toBeGreaterThan(0);
+    expect(entrega.store_id).toBeNull();
+    criados.push(retirada.id);
+
+    const fila = (await get(`/api/orders?store_id=${alvo.lojaId}`)).body.orders;
+    expect(fila.some((o: any) => o.id === retirada.id)).toBe(true);
+    expect(fila.some((o: any) => o.id === entrega.id)).toBe(false);
+    await comoGerente("POST", `/api/orders/${entrega.id}/expire`);
+    await limpar();
+  });
+
+  it.skipIf(!temExtras())("S3-20: item com entrega sem endereco responde 400", async () => {
+    esperarErro(
+      await post("/api/orders/checkout", {
+        customer_name: "Cliente Teste",
+        store_id: alvo.lojaId,
+        items: [{ product_id: alvo.produto.id, quantity: 1, delivery: "entrega_padrao" }],
+        card_number: "4111 1111 1111 1234",
+      }),
+      400
+    );
+  });
+
+  // S3-25
+  it.skipIf(!temExtras())("S3-25: pedido registra a origem e o prazo; o estoque sai da origem", async () => {
+    const lojas = (await get("/api/stores")).body.stores as any[];
+    const destino = lojas.find((l) => l.id !== alvo.lojaId);
+    const origemId = alvo.lojaId;
+    const opcoes = (
+      await get(`/api/stores/${destino.id}/transfer-options?product_id=${alvo.produto.id}&quantity=1`)
+    ).body.options as any[];
+    const opcao = opcoes.find((o) => o.store_id === origemId);
+    expect(opcao).toBeTruthy();
+
+    const estoqueOrigemAntes = await consultarEstoque(origemId, alvo.produto.id);
+    const compra = await post("/api/orders/checkout", {
+      customer_name: "Cliente Teste de Contrato",
+      customer_cpf: CPF_TITULAR,
+      store_id: destino.id,
+      items: [{ product_id: alvo.produto.id, quantity: 1, transfer_from: origemId }],
+      card_number: "4111 1111 1111 1234",
+    });
+    expect(compra.status).toBe(201);
+    const pedido = compra.body.orders[0];
+    expect(pedido.store_id).toBe(destino.id);
+    expect(pedido.origin_store_id).toBe(origemId);
+    expect(pedido.origin_store_name).toBeTruthy();
+    expect(pedido.transfer_eta_days).toBe(opcao.eta_days);
+    expect(await consultarEstoque(origemId, alvo.produto.id)).toBe(estoqueOrigemAntes - 1);
+
+    // Cancelar devolve a unidade para a ORIGEM, nao para o destino.
+    await comoGerente("POST", `/api/orders/${pedido.id}/expire`);
+    expect(await consultarEstoque(origemId, alvo.produto.id)).toBe(estoqueOrigemAntes);
+  });
+
+  // S3-17
+  it.skipIf(!temAuditoria())("S3-17: separar e dar baixa gravam quem fez o que, por pedido", async () => {
+    const compra = await post("/api/orders", pedidoValido());
+    const id = compra.body.order.id;
+    const separacao = await post(`/api/orders/${id}/separate`, { barcode_or_sku: alvo.produto.sku });
+    await post("/api/orders/validate-pickup", {
+      pickup_code: separacao.body.order.pickup_code,
+      document_checked: true,
+    });
+
+    const { status, body } = await get(`/api/orders/${id}/audit`);
+    expect(status).toBe(200);
+    const acoes = body.audit.map((a: any) => a.action).sort();
+    expect(acoes).toEqual(["baixa_retirada", "separar_pedido"]);
+    for (const linha of body.audit) {
+      expect(linha).toMatchObject({
+        order_id: id,
+        user_email: expect.stringContaining("@"),
+        user_role: "operador",
+        created_at: expect.any(String),
+      });
+    }
+  });
+
+  it.skipIf(!temAuditoria())("S3-17: o log geral so abre para gerente/empresa", async () => {
+    esperarErro(await get("/api/audit"), 403);
+    const geral = await comoGerente("GET", "/api/audit?limit=5");
+    expect(geral.status).toBe(200);
+    expect(Array.isArray(geral.body.audit)).toBe(true);
+  });
+});

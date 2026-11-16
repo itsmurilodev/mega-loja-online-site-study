@@ -83,14 +83,22 @@ backend/
 | `GET` | `/api/auth/me` | **S3-07** | Usuário do token enviado em `Authorization: Bearer` |
 | `POST` | `/api/orders/checkout` | **S3-30** | Carrinho com vários itens: confere todo o estoque, cobra uma vez e cria um pedido por item |
 | `GET` | `/api/orders/mine` | S3-27 · papel `cliente` | Pedidos do cliente logado (pelo CPF do cadastro) |
-| `GET` | `/api/orders` | RF005 · papel `operador`/`empresa` | Lista pedidos com join de produto e filial (`?store_id=` e `?status=`) |
+| `GET` | `/api/orders` | RF005 · papel `operador`/`gerente`/`empresa` | Lista pedidos com join de produto e filial (`?store_id=` e `?status=`) |
 | `GET` | `/api/orders/:id` | RF005 | Detalhes completos de um pedido específico |
 | `GET` | `/api/orders/:id/notifications` | RF004 | Histórico de notificações do pedido |
+| `POST` | `/api/orders/quote` | **S3-23** | Total a pagar (itens + frete simulado), sem criar nada |
+| `POST` | `/api/orders/third-party-code` | **S3-18** | Gera o código de confirmação do terceiro (envio por e-mail **simulado**) |
+| `POST` | `/api/payments/pix` | **S3-23** | Cobrança Pix **simulada** (token assinado, expira em 5 min) |
+| `GET` | `/api/orders/pickup-slots` | **S3-22** | Janelas de retirada do dia e vagas por janela (precisa da migração 001) |
+| `GET` | `/api/stores/:id/transfer-options` | **S3-25** | Filiais/CD que podem enviar o item e o novo prazo |
+| `POST` | `/api/orders/expire-overdue` | **S3-24** · `gerente`/`empresa` | Libera as reservas vencidas e devolve o estoque |
+| `GET` | `/api/orders/:id/audit` | **S3-17** · staff | Histórico de ações dos colaboradores no pedido |
+| `GET` | `/api/audit` | **S3-17** · `gerente`/`empresa` | Log de auditoria geral |
 | `POST` | `/api/orders` | **UC003 / RNF001** | Finalizar compra, validar/reservar estoque ($\le$ 60s) e cobrar cartão |
 | `POST` | `/api/orders/:id/separate` | **UC005 / RNF003** | Conferir SKU/código de barras, embalar e gerar QR Code assinado |
 | `POST` | `/api/orders/:id/rupture` | **UC008** | Registrar ruptura na prateleira, zerar estoque local e solicitar estorno |
 | `POST` | `/api/orders/validate-pickup` | **UC007** | Validar retirada presencial (QR Code ou CPF) com conferência de documento |
-| `POST` | `/api/orders/:id/expire` | Abandono | Expirar pedido por não-comparecimento (7 dias) e devolver item ao estoque |
+| `POST` | `/api/orders/:id/expire` | Abandono · `gerente`/`empresa` | Expirar pedido por não-comparecimento (7 dias) e devolver item ao estoque |
 | `PATCH` | `/api/orders/:id/status` | Compatibilidade | Atualização genérica de status delegando para os casos de uso oficiais |
 
-**Autenticação (S3-14):** `separate`, `rupture`, `validate-pickup` (e o alias `pickup`), `expire`, `PATCH status` e a listagem `GET /api/orders` exigem `Authorization: Bearer <access_token>` de uma conta `operador` ou `empresa` (`401` sem token ou token inválido, `403` com papel errado). `POST/PATCH /api/products` exigem `empresa`. Criar pedido e consultar um pedido continuam abertos para o cliente. Contas de operador/empresa são criadas com `npm run seed:usuario` (ver README da raiz).
+**Autenticação (S3-14 / S3-16):** `separate`, `rupture`, `validate-pickup` (e o alias `pickup`), `PATCH status` e a listagem `GET /api/orders` exigem `Authorization: Bearer <access_token>` de uma conta `operador`, `gerente` ou `empresa`; `expire`, `expire-overdue` e o cancelamento por `PATCH status` exigem `gerente` ou `empresa` (`401` sem token ou token inválido, `403` com papel errado). `POST/PATCH /api/products` exigem `empresa`. Criar pedido e consultar um pedido continuam abertos para o cliente. Contas de operador/empresa são criadas com `npm run seed:usuario` (ver README da raiz).

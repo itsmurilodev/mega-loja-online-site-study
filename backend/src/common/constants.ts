@@ -71,6 +71,28 @@ export const ORDER_STATUS = new Set<string>([
   "cancelado",
 ]);
 
+// S3-24: prazo (em horas) que a loja tem para separar o pedido depois do pagamento.
+// Passado o prazo, a reserva é liberada e a quantidade volta para o estoque.
+export const RESERVA_HORAS = Math.max(
+  Number(process.env.RESERVA_HORAS || 48) || 48,
+  1
+);
+// Pedido separado (pronto_retirada) e não retirado expira em 7 dias.
+export const RETIRADA_PRAZO_DIAS = 7;
+// Quando "true", a fila do operador já libera sozinha as reservas vencidas.
+export const RESERVA_AUTO_EXPIRAR = process.env.RESERVA_AUTO_EXPIRAR === "true";
+
+// S3-20: frete simulado (valor fixo por compra com algum item para entrega).
+export const FRETE_SIMULADO = Number(process.env.FRETE_SIMULADO || 19.9);
+
+// S3-25: Centro de Distribuição (loja inativa para retirada, mas com estoque próprio).
+export const CD_STORE_ID = 99;
+export const TRANSFER_ETA_DIAS = { filial: 1, cd: 3 } as const;
+
+// S3-22: janelas de retirada de 1 hora, das 08h às 20h.
+export const SLOT_HORA_INICIO = 8;
+export const SLOT_HORA_FIM = 20;
+
 // Modalidades aceitas pelo checkout.
 export const DELIVERY_METHODS = new Set<string>([
   "entrega_padrao",
@@ -128,6 +150,20 @@ export interface OrderView {
   store_name: string | null;
   store_address?: string | null;
   store_city?: string | null;
+  /** S3-24: até quando a loja precisa separar o pedido (só em aguardando_separacao). */
+  reserved_until?: string | null;
+  /** S3-22: início da janela de retirada escolhida (AAAA-MM-DDTHH:00). */
+  pickup_slot?: string | null;
+  /** S3-20: endereço e frete dos itens com entrega. */
+  shipping_address?: string | null;
+  shipping_cost?: number | null;
+  /** S3-23: cartao, pix ou cartao+pix. */
+  payment_method?: string | null;
+  payment_detail?: string | null;
+  /** S3-25: de onde vem o item quando é transferido de outra filial / CD. */
+  origin_store_id?: number | null;
+  origin_store_name?: string | null;
+  transfer_eta_days?: number | null;
 }
 
 export interface NotificationRow {

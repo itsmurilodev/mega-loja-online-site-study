@@ -23,7 +23,7 @@ let pedidosNovos = [];
 let timerPedidos = null;
 
 let sessao = lerStorage(localStorage, CHAVE_SESSAO, null); // { access_token, user }
-let carrinho = lerStorage(localStorage, CHAVE_CARRINHO, []); // [{ id, qtd }]
+let carrinho = lerStorage(localStorage, CHAVE_CARRINHO, []); // [{ id, qtd, entrega?, origem?, origemNome?, eta? }]
 if (!Array.isArray(carrinho)) carrinho = [];
 
 const apiFetch = criarApiFetch({
@@ -342,6 +342,18 @@ function salvarCarrinho() {
     atualizarBadgeCarrinho();
 }
 
+/** Quantidade máxima do item: o estoque da filial, ou o limite geral quando vem de transferência/entrega. */
+function limiteDoItem(item, produto) {
+    if (item.entrega === 'entrega_padrao' || item.origem) return LIMITE_POR_ITEM;
+    return Math.max(1, Math.min(estoqueNaFilial(produto), LIMITE_POR_ITEM));
+}
+
+function itemSemEstoque(item) {
+    return (item.entrega || 'retirar_na_loja') === 'retirar_na_loja'
+        && !item.origem
+        && estoqueNaFilial(item.produto) < item.qtd;
+}
+
 function totalDeItens() {
     return carrinho.reduce((soma, item) => soma + item.qtd, 0);
 }
@@ -356,14 +368,15 @@ function adicionarAoCarrinho(produtoId, qtd = 1, abrir = false) {
     if (!produto) return;
 
     const estoque = estoqueNaFilial(produto);
-    if (estoque <= 0) {
-        triggerToast('Sem estoque nesta filial', `${produto.nome} está em falta em ${lojaAtiva.nome}. Troque a filial de retirada.`, 'warning');
-        return;
-    }
-
     const existente = carrinho.find((item) => item.id === produtoId);
-    const limite = Math.min(estoque, LIMITE_POR_ITEM);
+    const limite = existente ? limiteDoItem(existente, produto) : (estoque > 0 ? Math.min(estoque, LIMITE_POR_ITEM) : LIMITE_POR_ITEM);
     const atual = existente ? existente.qtd : 0;
+
+    if (estoque <= 0 && !existente) {
+        // S3-25 / S3-20: sem estoque na filial o item entra no carrinho e o cliente escolhe
+        // trazer de outra filial/CD ou receber em casa.
+        triggerToast('Sem estoque nesta filial', `${produto.nome} está em falta em ${lojaAtiva.nome}. No carrinho você pode pedir a transferência de outra filial ou escolher entrega em casa.`, 'warning');
+    }
 
     if (atual >= limite) {
         triggerToast('Limite atingido', `Só há ${estoque} un. de ${produto.nome} nesta filial.`, 'warning');
@@ -384,7 +397,7 @@ function alterarQuantidade(produtoId, delta) {
     const produto = dbProdutos.find((p) => p.id === produtoId);
     if (!item || !produto) return;
 
-    const limite = Math.max(1, Math.min(estoqueNaFilial(produto), LIMITE_POR_ITEM));
+    const limite = limiteDoItem(item, produto);
     const nova = item.qtd + delta;
     if (nova < 1) {
         removerDoCarrinho(produtoId);
@@ -434,20 +447,26 @@ function renderizarCarrinho() {
     const lista = document.getElementById('lista-carrinho');
     lista.replaceChildren();
 
-    let subtotal = 0;
-    let unidades = 0;
     let semEstoque = 0;
 
-    itens.forEach(({ produto, qtd }) => {
+    itens.forEach((it) => {
+        const { produto, qtd } = it;
         const estoque = estoqueNaFilial(produto);
-        const problema = estoque < qtd;
+        const entrega = it.entrega === 'entrega_padrao';
+        const problema = itemSemEstoque(it);
         if (problema) semEstoque += 1;
-        subtotal += produto.preco * qtd;
-        unidades += qtd;
 
         const linha = document.createElement('div');
-        linha.className = 'flex flex-col sm:flex-row sm:items-center gap-4 py-4 first:pt-0 last:pb-0';
+        linha.className = 'flex flex-col gap-3 py-4 first:pt-0 last:pb-0';
+        const situacao = entrega
+            ? 'Será entregue no seu endereço (frete simulado).'
+            : it.origem
+                ? `Vem de ${it.origemNome ? it.origemNome.replace('MegaLoja - ', '') : 'outra filial'} — chega em ${it.eta} dia(s) útil(eis) na filial.`
+                : problema
+                    ? `Só ${estoque} un. disponíveis nesta filial — ajuste a quantidade, peça transferência ou receba em casa.`
+                    : `${estoque} un. disponíveis na filial`;
         linha.innerHTML = `
+            <div class="flex flex-col sm:flex-row sm:items-center gap-4">
             <div class="flex items-center gap-4 flex-1 min-w-0">
                 <div class="w-20 h-20 bg-gray-50 rounded-xl p-2 border border-gray-100 flex items-center justify-center shrink-0">
                     <img src="${esc(produto.img)}" alt="" class="max-h-full max-w-full object-contain">
@@ -456,11 +475,7 @@ function renderizarCarrinho() {
                     <span class="text-[9px] font-black text-blue-600 uppercase tracking-widest bg-blue-50 px-2 py-0.5 rounded">${esc(produto.categoria)}</span>
                     <h3 class="font-bold text-sm text-gray-900 mt-1 truncate">${esc(produto.nome)}</h3>
                     <p class="text-[10px] text-gray-400 font-mono mt-0.5">SKU: ${esc(produto.sku)}</p>
-                    <p class="text-[10px] font-bold mt-1 ${problema ? 'text-red-600' : 'text-emerald-600'}">
-                        ${problema
-                            ? `Só ${estoque} un. disponíveis nesta filial — ajuste a quantidade`
-                            : `${estoque} un. disponíveis na filial`}
-                    </p>
+                    <p class="text-[10px] font-bold mt-1 ${problema ? 'text-red-600' : 'text-emerald-600'}">${esc(situacao)}</p>
                 </div>
             </div>
             <div class="flex items-center justify-between sm:justify-end gap-5 shrink-0">
@@ -476,22 +491,30 @@ function renderizarCarrinho() {
                 <button type="button" data-remover class="text-gray-400 hover:text-red-600 p-2" title="Remover do carrinho" aria-label="Remover ${esc(produto.nome)} do carrinho">
                     <i class="fa-solid fa-trash-can"></i>
                 </button>
-            </div>`;
+            </div>
+            </div>
+            <div class="flex flex-wrap items-center gap-2 text-[11px]" role="group" aria-label="Como receber ${esc(produto.nome)}">
+                <button type="button" data-modo="retirar_na_loja" class="px-3 py-1.5 rounded-lg border font-bold ${entrega ? 'border-gray-300 text-gray-600 hover:bg-gray-50' : 'border-blue-600 bg-blue-50 text-blue-800'}">Retirar na loja</button>
+                <button type="button" data-modo="entrega_padrao" class="px-3 py-1.5 rounded-lg border font-bold ${entrega ? 'border-blue-600 bg-blue-50 text-blue-800' : 'border-gray-300 text-gray-600 hover:bg-gray-50'}">Receber em casa</button>
+                ${problema ? '<button type="button" data-origens class="px-3 py-1.5 rounded-lg border border-amber-400 bg-amber-50 text-amber-900 font-bold">Buscar em outra filial / CD</button>' : ''}
+                ${it.origem ? '<button type="button" data-sem-origem class="text-gray-500 hover:text-red-600 underline">Cancelar transferência</button>' : ''}
+            </div>
+            <div data-origens-lista class="flex flex-col gap-1.5 text-[11px] text-gray-500"></div>`;
 
         linha.querySelectorAll('[data-delta]').forEach((btn) => {
             btn.addEventListener('click', () => alterarQuantidade(produto.id, Number(btn.dataset.delta)));
         });
         linha.querySelector('[data-remover]').addEventListener('click', () => removerDoCarrinho(produto.id));
+        linha.querySelectorAll('[data-modo]').forEach((btn) => {
+            btn.addEventListener('click', () => definirEntrega(produto.id, btn.dataset.modo));
+        });
+        linha.querySelector('[data-origens]')?.addEventListener('click', () =>
+            buscarOrigens(produto.id, qtd, linha.querySelector('[data-origens-lista]')));
+        linha.querySelector('[data-sem-origem]')?.addEventListener('click', () => removerOrigem(produto.id));
         lista.appendChild(linha);
     });
 
-    document.getElementById('carrinho-resumo-itens').innerText =
-        `Subtotal (${unidades} ${unidades === 1 ? 'item' : 'itens'})`;
-    document.getElementById('carrinho-resumo-subtotal').innerText = formatarMoeda(subtotal);
-    document.getElementById('carrinho-resumo-total').innerText = formatarMoeda(subtotal);
-    document.getElementById('carrinho-resumo-pix').innerText = formatarMoeda(subtotal * 0.95);
-    document.getElementById('carrinho-resumo-parcelas').innerText =
-        `ou em até 12x de ${formatarMoeda(subtotal / 12)} sem juros no cartão`;
+    atualizarResumoCarrinho(itens);
 
     const info = document.getElementById('txt-status-loja-info');
     if (info) {
@@ -509,6 +532,7 @@ function renderizarCarrinho() {
 
     atualizarLayoutFocoLoja();
     preencherDadosDoTitular();
+    aoRenderizarCarrinho(itens);
 }
 
 function toggleCamposTerceiro() {
@@ -698,88 +722,7 @@ function atualizarLayoutFocoLoja() {
     }
 }
 
-// ---------------------------------------------------------------------------
-// Finalizar compra (carrinho -> /api/orders/checkout)
-// ---------------------------------------------------------------------------
-async function finalizarCompra() {
-    if (finalizando) return;
-    const itens = itensDoCarrinho();
-    if (itens.length === 0) {
-        triggerToast('Carrinho vazio', 'Adicione produtos antes de finalizar.', 'warning');
-        return;
-    }
-
-    const semEstoque = itens.filter(({ produto, qtd }) => estoqueNaFilial(produto) < qtd);
-    if (semEstoque.length > 0) {
-        triggerToast('Ajuste o carrinho', `${semEstoque[0].produto.nome} não tem estoque suficiente nesta filial.`, 'warning');
-        return;
-    }
-
-    const nome = document.getElementById('chk-nome-cliente').value.trim();
-    const cpf = document.getElementById('chk-cpf-cliente').value.trim();
-    const comTerceiro = document.getElementById('chk-habilitar-terceiro').checked;
-    const nomeTerceiro = comTerceiro ? document.getElementById('chk-nome-terceiro').value.trim() : null;
-    const cpfTerceiro = comTerceiro ? document.getElementById('chk-cpf-terceiro').value.trim() : null;
-
-    if (!nome || !cpf) {
-        triggerToast('Dados incompletos', 'Preencha o nome e o CPF do titular.', 'warning');
-        return;
-    }
-    if (comTerceiro && (!nomeTerceiro || !cpfTerceiro)) {
-        triggerToast('Dados de quem vai retirar', 'Preencha o nome e o CPF da pessoa autorizada.', 'warning');
-        return;
-    }
-
-    const botao = document.getElementById('btn-finalizar');
-    finalizando = true;
-    botao.disabled = true;
-
-    try {
-        const resp = await apiFetch('/api/orders/checkout', {
-            method: 'POST',
-            body: JSON.stringify({
-                customer_name: nome,
-                customer_cpf: cpf,
-                delivery_method: 'retirar_na_loja',
-                store_id: lojaAtiva.id,
-                items: itens.map(({ produto, qtd }) => ({ product_id: produto.id, quantity: qtd })),
-                card_number: document.getElementById('chk-cartao-numero').value.trim(),
-                simulate_payment_failure: document.getElementById('chk-simular-recusa').checked,
-                third_party_name: nomeTerceiro,
-                third_party_cpf: cpfTerceiro,
-            }),
-        });
-
-        const criados = resp.orders || [];
-        guardarPedidosLocais(criados.map((o) => o.id));
-        pedidosNovos = criados.map((o) => o.id);
-
-        // Abate o estoque na memória para a vitrine refletir a compra.
-        criados.forEach((o) => {
-            const produto = dbProdutos.find((p) => p.id === o.product_id);
-            if (produto) {
-                produto.estoques[lojaAtiva.id] = Math.max(0, estoqueNaFilial(produto) - o.quantity);
-            }
-        });
-
-        carrinho = [];
-        salvarCarrinho();
-        executarFiltrosCombinados();
-        await abrirPedidos(criados);
-        triggerToast('Pedido confirmado!', 'A filial já recebeu a ordem de separação.', 'success');
-    } catch (err) {
-        triggerToast('Não foi possível finalizar', err.message, 'warning');
-        // O estoque pode ter mudado: atualiza o catálogo para o cliente ajustar o carrinho.
-        if (err.status === 409) {
-            await carregarDadosBackend();
-            renderizarCarrinho();
-            executarFiltrosCombinados();
-        }
-    } finally {
-        finalizando = false;
-        botao.disabled = false;
-    }
-}
+// finalizarCompra() e o restante do checkout ficam em js/checkout.js
 
 // ---------------------------------------------------------------------------
 // Meus pedidos
@@ -826,7 +769,9 @@ async function carregarPedidosCliente(mostrarAviso, jaCarregados = []) {
         triggerToast('Não foi possível carregar os pedidos', err.message, 'warning');
     }
 
-    renderizarPedidos([...mapa.values()].sort((a, b) => b.id - a.id));
+    const ordenados = [...mapa.values()].sort((a, b) => b.id - a.id);
+    const notificacoes = await buscarNotificacoes(ordenados.slice(0, 12));
+    renderizarPedidos(ordenados, notificacoes);
     if (mostrarAviso && pedidosNovos.length > 0) {
         const aviso = document.getElementById('aviso-pedido-novo');
         document.getElementById('texto-pedido-novo').textContent =
@@ -839,17 +784,34 @@ async function carregarPedidosCliente(mostrarAviso, jaCarregados = []) {
     }
 }
 
-function renderizarPedidos(pedidos) {
+/** S3-10: notificações de cada pedido (o aviso do QR é um mock; o texto avisa isso). */
+async function buscarNotificacoes(pedidos) {
+    const mapa = new Map();
+    const resultados = await Promise.allSettled(pedidos.map((p) => apiFetch(`/api/orders/${p.id}/notifications`)));
+    resultados.forEach((r, i) => {
+        if (r.status === 'fulfilled') mapa.set(pedidos[i].id, r.value.notifications || []);
+    });
+    return mapa;
+}
+
+function formatarJanela(slot) {
+    return `${slot.slice(8, 10)}/${slot.slice(5, 7)} às ${slot.slice(11, 16)}`;
+}
+
+function renderizarPedidos(pedidos, notificacoes = new Map()) {
     const lista = document.getElementById('lista-pedidos');
     lista.replaceChildren();
     document.getElementById('pedidos-vazio').classList.toggle('hidden', pedidos.length > 0);
 
     pedidos.forEach((p) => {
         const st = infoStatus(p.status);
+        const entrega = p.delivery_method === 'entrega_padrao';
         const pronto = p.status === 'pronto_retirada';
         const entregue = p.status === 'entregue_cliente' || p.status === 'retirado';
         const cancelado = p.status.startsWith('cancelado');
         const novo = pedidosNovos.includes(p.id);
+        const avisos = notificacoes.get(p.id) || [];
+        const venceEm = p.reserved_until ? new Date(p.reserved_until + 'Z') : null;
 
         const card = document.createElement('article');
         card.className = `bg-white rounded-2xl border shadow-sm overflow-hidden ${novo ? 'border-emerald-300 ring-2 ring-emerald-100' : 'border-gray-200'}`;
@@ -864,12 +826,19 @@ function renderizarPedidos(pedidos) {
             <div class="p-5 grid grid-cols-1 sm:grid-cols-3 gap-5 items-center">
                 <dl class="sm:col-span-2 text-xs space-y-2">
                     <div class="flex justify-between gap-3"><dt class="text-gray-500">Produto</dt><dd class="font-bold text-gray-800 text-right">${p.quantity}x ${esc(p.product_name)}</dd></div>
-                    <div class="flex justify-between gap-3"><dt class="text-gray-500">Retirar em</dt><dd class="font-bold text-gray-800 text-right">${esc(p.store_name || 'Filial')}</dd></div>
+                    ${entrega
+                        ? `<div class="flex justify-between gap-3"><dt class="text-gray-500">Entrega em</dt><dd class="font-bold text-gray-800 text-right">${esc(p.shipping_address || 'Endereço informado no pedido')}${p.shipping_cost ? ` (frete ${esc(formatarMoeda(p.shipping_cost))} simulado)` : ''}</dd></div>`
+                        : `<div class="flex justify-between gap-3"><dt class="text-gray-500">Retirar em</dt><dd class="font-bold text-gray-800 text-right">${esc(p.store_name || 'Filial')}</dd></div>`}
+                    ${p.pickup_slot ? `<div class="flex justify-between gap-3"><dt class="text-gray-500">Horário marcado</dt><dd class="font-bold text-blue-700 text-right">${esc(formatarJanela(p.pickup_slot))}</dd></div>` : ''}
+                    ${p.origin_store_name ? `<div class="flex justify-between gap-3"><dt class="text-gray-500">Transferência</dt><dd class="font-bold text-gray-800 text-right">de ${esc(p.origin_store_name.replace('MegaLoja - ', ''))} (${Number(p.transfer_eta_days)} dia(s) útil(eis))</dd></div>` : ''}
+                    ${p.payment_method ? `<div class="flex justify-between gap-3"><dt class="text-gray-500">Pagamento</dt><dd class="font-bold text-gray-800 text-right">${esc(p.payment_method.replace('+', ' + ').replace('cartao', 'Cartão').replace('pix', 'Pix'))} (simulado)</dd></div>` : ''}
                     <div class="flex justify-between gap-3"><dt class="text-gray-500">Titular</dt><dd class="font-bold text-gray-800 text-right">${esc(p.customer_name)}${p.customer_cpf ? ` (${esc(p.customer_cpf)})` : ''}</dd></div>
                     ${p.third_party_name ? `<div class="flex justify-between gap-3"><dt class="text-gray-500">Retira por você</dt><dd class="font-bold text-blue-700 text-right">${esc(p.third_party_name)} (${esc(p.third_party_cpf || '')})</dd></div>` : ''}
-                    <p class="text-[11px] text-gray-500 pt-1 border-t border-gray-100">${esc(mensagemStatus(p.status))}</p>
+                    ${venceEm ? `<div class="flex justify-between gap-3"><dt class="text-gray-500">Reserva vale até</dt><dd class="font-bold text-amber-700 text-right">${esc(venceEm.toLocaleString('pt-BR'))}</dd></div>` : ''}
+                    <p class="text-[11px] text-gray-500 pt-1 border-t border-gray-100">${esc(mensagemStatus(p.status, entrega))}</p>
+                    ${avisos.length ? `<details class="text-[11px] text-gray-600"><summary class="cursor-pointer font-bold text-gray-700">Notificações (${avisos.length})</summary><ul class="mt-1.5 space-y-1">${avisos.map((n) => `<li class="bg-gray-50 border border-gray-100 rounded-lg px-2.5 py-1.5">${esc(n.message)}</li>`).join('')}</ul></details>` : ''}
                 </dl>
-                ${cancelado ? '' : `
+                ${cancelado || entrega ? '' : `
                 <div class="flex flex-col items-center gap-2 ${pronto ? '' : 'opacity-60'}">
                     <div class="w-32 h-32 bg-white border border-gray-200 p-2 rounded-xl relative flex items-center justify-center">
                         ${pronto
@@ -883,7 +852,10 @@ function renderizarPedidos(pedidos) {
     });
 }
 
-function mensagemStatus(status) {
+function mensagemStatus(status, entrega = false) {
+    if (entrega && !status.startsWith('cancelado')) {
+        return 'Pedido recebido para entrega em casa. A entrega é simulada nesta demonstração (sem transportadora).';
+    }
     switch (status) {
         case 'aguardando_separacao':
         case 'aguardando_preparacao':

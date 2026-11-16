@@ -344,6 +344,38 @@
                         </div>
                     </div>
 
+                    <!-- Janela de retirada (S3-22): aparece só quando o servidor tem a migração 001 -->
+                    <div id="box-janela" class="hidden bg-white border border-gray-200 rounded-2xl p-5 shadow-sm space-y-3">
+                        <h2 class="text-xs font-black text-gray-700 uppercase tracking-wider flex items-center gap-2 border-b border-gray-100 pb-3">
+                            <i class="fa-solid fa-clock text-blue-600"></i> Data e horário da retirada <span class="text-[9px] font-bold text-gray-400 normal-case">(opcional)</span>
+                        </h2>
+                        <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                            <div>
+                                <label for="chk-janela-data" class="text-[10px] font-bold text-gray-500 uppercase block mb-1">Dia</label>
+                                <input type="date" id="chk-janela-data" onchange="carregarJanelas()" class="w-full px-3 py-2 border border-gray-300 rounded-xl text-xs focus:outline-none focus:border-blue-600 font-medium">
+                            </div>
+                            <div>
+                                <label for="chk-janela-hora" class="text-[10px] font-bold text-gray-500 uppercase block mb-1">Horário</label>
+                                <select id="chk-janela-hora" class="w-full px-3 py-2 border border-gray-300 rounded-xl text-xs bg-white focus:outline-none focus:border-blue-600 font-medium">
+                                    <option value="">Sem horário marcado</option>
+                                </select>
+                            </div>
+                        </div>
+                        <p id="txt-janela-info" class="text-[11px] text-gray-500">Cada filial atende um número limitado de pedidos por hora.</p>
+                    </div>
+
+                    <!-- Endereço (S3-20): só quando algum item é para entrega em casa -->
+                    <div id="box-entrega" class="hidden bg-white border border-gray-200 rounded-2xl p-5 shadow-sm space-y-3">
+                        <h2 class="text-xs font-black text-gray-700 uppercase tracking-wider flex items-center gap-2 border-b border-gray-100 pb-3">
+                            <i class="fa-solid fa-truck text-blue-600"></i> Endereço de entrega
+                        </h2>
+                        <div>
+                            <label for="chk-endereco" class="text-[10px] font-bold text-gray-500 uppercase block mb-1">Rua, número, bairro e cidade</label>
+                            <input type="text" id="chk-endereco" autocomplete="street-address" placeholder="Ex.: Rua das Flores, 120 - Centro - Canoas/RS" class="w-full px-3 py-2 border border-gray-300 rounded-xl text-xs focus:outline-none focus:border-blue-600 font-medium">
+                        </div>
+                        <p class="text-[11px] text-gray-500">Frete simulado de valor fixo para os itens com entrega (a transportadora não existe nesta demonstração).</p>
+                    </div>
+
                     <!-- Titular -->
                     <div class="bg-white border border-gray-200 rounded-2xl p-5 shadow-sm space-y-4">
                         <h2 class="text-xs font-black text-gray-700 uppercase tracking-wider flex items-center gap-2 border-b border-gray-100 pb-3">
@@ -374,32 +406,78 @@
                                     <label for="chk-cpf-terceiro" class="text-[10px] font-bold text-gray-500 uppercase block mb-1">CPF de quem vai retirar</label>
                                     <input type="text" id="chk-cpf-terceiro" inputmode="numeric" placeholder="000.000.000-00" class="w-full px-3 py-2 border border-gray-300 rounded-xl text-xs focus:outline-none focus:border-blue-600 font-medium">
                                 </div>
+                                <div class="sm:col-span-2 grid grid-cols-1 sm:grid-cols-2 gap-3 items-end">
+                                    <div>
+                                        <label for="chk-codigo-terceiro" class="text-[10px] font-bold text-gray-500 uppercase block mb-1">Código de confirmação (6 dígitos)</label>
+                                        <input type="text" id="chk-codigo-terceiro" inputmode="numeric" maxlength="6" autocomplete="one-time-code" placeholder="000000" class="w-full px-3 py-2 border border-gray-300 rounded-xl text-xs focus:outline-none focus:border-blue-600 font-mono tracking-widest">
+                                    </div>
+                                    <button type="button" id="btn-enviar-codigo" onclick="enviarCodigoTerceiro()" class="bg-white border border-blue-300 text-blue-700 hover:bg-blue-50 font-bold py-2 rounded-xl text-xs">Enviar código por e-mail</button>
+                                </div>
+                                <p id="txt-codigo-terceiro" class="sm:col-span-2 text-[11px] text-gray-500">Para sua segurança, enviamos um código ao e-mail do titular. Sem ele a indicação não é aceita.</p>
                             </div>
                         </div>
                     </div>
 
-                    <!-- Pagamento -->
+                    <!-- Pagamento (S3-23): cartão, Pix ou os dois; tudo simulado -->
                     <div class="bg-white border border-gray-200 rounded-2xl p-5 shadow-sm space-y-4">
                         <div class="flex justify-between items-center border-b border-gray-100 pb-3">
                             <h2 class="text-xs font-black text-gray-700 uppercase tracking-wider flex items-center gap-2">
-                                <i class="fa-solid fa-credit-card text-blue-600"></i> Pagamento com cartão
+                                <i class="fa-solid fa-credit-card text-blue-600"></i> Pagamento
                             </h2>
-                            <span class="text-[9px] text-emerald-700 font-bold bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200">Ambiente seguro</span>
+                            <span class="text-[9px] text-amber-800 font-bold bg-amber-50 px-2 py-0.5 rounded border border-amber-200">Simulado: nada é cobrado de verdade</span>
                         </div>
-                        <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                            <div class="sm:col-span-2">
-                                <label for="chk-cartao-numero" class="text-[10px] font-bold text-gray-500 uppercase block mb-1">Número do cartão</label>
-                                <input type="text" id="chk-cartao-numero" inputmode="numeric" autocomplete="cc-number" value="4532 8900 1234 5678" class="w-full px-3 py-2 border border-gray-300 rounded-xl text-xs focus:outline-none focus:border-blue-600 font-mono">
+
+                        <fieldset class="grid grid-cols-1 sm:grid-cols-3 gap-2 text-xs">
+                            <legend class="sr-only">Forma de pagamento</legend>
+                            <label class="flex items-center gap-2 border border-gray-200 rounded-xl px-3 py-2 cursor-pointer has-[:checked]:border-blue-600 has-[:checked]:bg-blue-50">
+                                <input type="radio" name="chk-forma" value="cartao" checked onchange="atualizarFormaPagamento()" class="text-blue-600"> <span class="font-bold">Cartão</span>
+                            </label>
+                            <label class="flex items-center gap-2 border border-gray-200 rounded-xl px-3 py-2 cursor-pointer has-[:checked]:border-blue-600 has-[:checked]:bg-blue-50">
+                                <input type="radio" name="chk-forma" value="pix" onchange="atualizarFormaPagamento()" class="text-blue-600"> <span class="font-bold">Pix</span>
+                            </label>
+                            <label class="flex items-center gap-2 border border-gray-200 rounded-xl px-3 py-2 cursor-pointer has-[:checked]:border-blue-600 has-[:checked]:bg-blue-50">
+                                <input type="radio" name="chk-forma" value="cartao+pix" onchange="atualizarFormaPagamento()" class="text-blue-600"> <span class="font-bold">Cartão + Pix</span>
+                            </label>
+                        </fieldset>
+
+                        <div id="pg-cartao" class="space-y-3">
+                            <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                                <div class="sm:col-span-2">
+                                    <label for="chk-cartao-numero" class="text-[10px] font-bold text-gray-500 uppercase block mb-1">Número do cartão</label>
+                                    <input type="text" id="chk-cartao-numero" inputmode="numeric" autocomplete="cc-number" value="4532 8900 1234 5678" class="w-full px-3 py-2 border border-gray-300 rounded-xl text-xs focus:outline-none focus:border-blue-600 font-mono">
+                                </div>
+                                <div>
+                                    <label for="chk-cartao-cvv" class="text-[10px] font-bold text-gray-500 uppercase block mb-1">CVV</label>
+                                    <input type="text" id="chk-cartao-cvv" inputmode="numeric" autocomplete="cc-csc" value="888" maxlength="4" class="w-full px-3 py-2 border border-gray-300 rounded-xl text-xs focus:outline-none focus:border-blue-600 font-mono">
+                                </div>
                             </div>
-                            <div>
-                                <label for="chk-cartao-cvv" class="text-[10px] font-bold text-gray-500 uppercase block mb-1">CVV</label>
-                                <input type="text" id="chk-cartao-cvv" inputmode="numeric" autocomplete="cc-csc" value="888" maxlength="4" class="w-full px-3 py-2 border border-gray-300 rounded-xl text-xs focus:outline-none focus:border-blue-600 font-mono">
+                            <div id="pg-valor-cartao" class="hidden">
+                                <label for="chk-valor-cartao" class="text-[10px] font-bold text-gray-500 uppercase block mb-1">Valor no cartão (R$) <span class="normal-case text-gray-400">— o restante vai no Pix</span></label>
+                                <input type="text" id="chk-valor-cartao" inputmode="decimal" oninput="atualizarFormaPagamento()" placeholder="0,00" class="w-full sm:w-48 px-3 py-2 border border-gray-300 rounded-xl text-xs focus:outline-none focus:border-blue-600 font-mono">
                             </div>
+                            <label class="flex items-center space-x-2 cursor-pointer pt-1 text-[11px] text-red-700 select-none">
+                                <input type="checkbox" id="chk-simular-recusa" class="w-3.5 h-3.5 text-red-600 rounded">
+                                <span class="font-bold">Demonstração: simular recusa do cartão pela operadora</span>
+                            </label>
                         </div>
-                        <label class="flex items-center space-x-2 cursor-pointer pt-1 text-[11px] text-red-700 select-none">
-                            <input type="checkbox" id="chk-simular-recusa" class="w-3.5 h-3.5 text-red-600 rounded">
-                            <span class="font-bold">Demonstração: simular recusa do cartão pela operadora</span>
-                        </label>
+
+                        <div id="pg-pix" class="hidden space-y-3 bg-emerald-50/50 border border-emerald-200 rounded-xl p-4">
+                            <div class="flex flex-wrap items-center justify-between gap-2">
+                                <p class="text-xs font-bold text-emerald-900"><i class="fa-brands fa-pix mr-1"></i> Pix a pagar: <span id="pix-valor">R$ 0,00</span></p>
+                                <button type="button" id="btn-gerar-pix" onclick="gerarPix()" class="bg-emerald-600 hover:bg-emerald-700 text-white font-bold px-3 py-2 rounded-xl text-xs">Gerar QR Code Pix</button>
+                            </div>
+                            <div id="pix-cobranca" class="hidden grid grid-cols-1 sm:grid-cols-3 gap-3 items-center">
+                                <div class="bg-white border border-gray-200 rounded-xl p-2 flex items-center justify-center w-32 h-32 mx-auto">
+                                    <img id="pix-qr" alt="QR Code do Pix (simulado)" class="w-full h-full object-contain">
+                                </div>
+                                <div class="sm:col-span-2 space-y-2 text-[11px]">
+                                    <label for="pix-copia-cola" class="text-[10px] font-bold text-gray-500 uppercase block">Pix copia e cola (simulado)</label>
+                                    <input type="text" id="pix-copia-cola" readonly class="w-full px-3 py-2 border border-gray-300 rounded-xl text-[10px] font-mono bg-white">
+                                    <p id="pix-status" class="font-bold text-emerald-800"></p>
+                                </div>
+                            </div>
+                            <p class="text-[10px] text-gray-500">Simulação: gerar o QR Code já vale como "pagamento recebido" enquanto ele não expirar. O QR expira em 5 minutos.</p>
+                        </div>
                     </div>
                 </div>
 
@@ -414,8 +492,8 @@
                             <span id="carrinho-resumo-subtotal" class="font-bold text-gray-900">R$ 0,00</span>
                         </div>
                         <div class="flex justify-between text-gray-600">
-                            <span>Frete Click & Collect</span>
-                            <span class="font-black text-emerald-600">Grátis (R$ 0,00)</span>
+                            <span id="carrinho-resumo-frete-rotulo">Frete Click & Collect</span>
+                            <span id="carrinho-resumo-frete" class="font-black text-emerald-600">Grátis (R$ 0,00)</span>
                         </div>
                         <div class="border-t border-gray-200 pt-3 flex justify-between items-baseline">
                             <span class="font-bold text-sm text-gray-800">Total a pagar</span>
@@ -425,7 +503,7 @@
 
                     <div class="bg-gradient-to-br from-emerald-50/70 to-blue-50/40 border border-emerald-200/60 rounded-xl p-3.5 space-y-1.5 text-xs">
                         <div class="flex justify-between items-center text-emerald-800 font-bold">
-                            <span class="flex items-center gap-1.5"><i class="fa-brands fa-pix text-emerald-600"></i> À vista no Pix (5% OFF):</span>
+                            <span class="flex items-center gap-1.5"><i class="fa-brands fa-pix text-emerald-600"></i> À vista no Pix (simulado):</span>
                             <span id="carrinho-resumo-pix" class="text-sm font-black text-emerald-700">R$ 0,00</span>
                         </div>
                         <p class="text-[11px] text-gray-600 pt-1 border-t border-emerald-100/60" id="carrinho-resumo-parcelas">ou em até 12x sem juros no cartão</p>
@@ -629,5 +707,6 @@
 
     <script src="js/common.js"></script>
     <script src="js/app.js"></script>
+    <script src="js/checkout.js"></script>
 </body>
 </html>

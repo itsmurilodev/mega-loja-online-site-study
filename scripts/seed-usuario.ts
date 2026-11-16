@@ -7,13 +7,13 @@
  *   $env:SEED_EMAIL="operador@megaloja.com"; $env:SEED_PASSWORD="troque-esta-senha"
  *   $env:SEED_ROLE="operador"; $env:SEED_NAME="Operador Canoas"; npm run seed:usuario
  *
- * Papéis: operador | empresa | cliente. Precisa de SUPABASE_URL e
+ * Papéis: operador | gerente | empresa | cliente. Precisa de SUPABASE_URL e
  * SUPABASE_SERVICE_ROLE_KEY no .env. A senha vem só do ambiente: nada fica no código.
  */
 import { createClient } from "@supabase/supabase-js";
 import "../backend/src/common/constants"; // carrega o .env
 
-const ROLES = ["operador", "empresa", "cliente"];
+const ROLES = ["operador", "gerente", "empresa", "cliente"];
 
 async function main(): Promise<void> {
   const url = process.env.SUPABASE_URL;

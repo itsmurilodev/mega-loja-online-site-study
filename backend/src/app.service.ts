@@ -7,10 +7,14 @@ import {
   SUPABASE_URL,
 } from "./common/constants";
 import { RnfMetricsService } from "./common/metrics/rnf-metrics.service";
+import { SchemaService } from "./supabase/schema.service";
 
 @Injectable()
 export class AppService {
-  constructor(private readonly rnfMetricsService: RnfMetricsService) {}
+  constructor(
+    private readonly rnfMetricsService: RnfMetricsService,
+    private readonly schema: SchemaService
+  ) {}
 
   getApiIndex() {
     return {
@@ -35,8 +39,17 @@ export class AppService {
     };
   }
 
-  getHealth() {
+  async getHealth() {
     const rnf001 = this.rnfMetricsService.getSummary();
+    let migracao001 = { orders_extra: false, audit_log: false };
+    try {
+      migracao001 = {
+        orders_extra: await this.schema.has("orders_extra"),
+        audit_log: await this.schema.has("audit_log"),
+      };
+    } catch {
+      // Sem credenciais do Supabase o health continua respondendo.
+    }
     return {
       status: "online",
       database: "supabase-postgresql",
@@ -47,6 +60,8 @@ export class AppService {
         ),
         force_https_demo: FORCE_HTTPS,
       },
+      // Migração SQL 001 (backend/migrations): janela de retirada, entrega, Pix, transferência e auditoria.
+      migracao_001: migracao001,
       rnf001_sla: {
         limit_ms: RNF001_SLA_LIMIT_MS,
         status: rnf001.status,
