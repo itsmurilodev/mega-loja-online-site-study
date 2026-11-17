@@ -4,8 +4,8 @@
 
 const CHAVE_SESSAO_OP = 'megaloja_op_sessao';
 const CHAVE_FILIAL_OP = 'megaloja_op_filial';
-const PAPEIS_PORTAL = ['operador', 'gerente', 'empresa'];
-const ROTULOS_PERFIL = {
+const PAPEIS_PORTAL: Papel[] = ['operador', 'gerente', 'empresa'];
+const ROTULOS_PERFIL: Record<Papel, string> = {
     operador: 'Perfil: Operador de balcão',
     gerente: 'Perfil: Gerente da loja',
     empresa: 'Perfil: Empresa (gestão)',
@@ -15,20 +15,20 @@ const CHAVE_CACHE_FILA = 'megaloja_op_cache_fila';
 const CHAVE_FILA_OFFLINE = 'megaloja_op_fila_offline';
 
 /** S3-16: só gerente e empresa cancelam pedido ou liberam reservas. */
-function podeCancelar() {
+function podeCancelar(): boolean {
     return ['gerente', 'empresa'].includes(sessaoOp?.user.role);
 }
 
-let sessaoOp = lerStorage(sessionStorage, CHAVE_SESSAO_OP, null); // { access_token, user }
-let lojas = [];
-let filialId = null;
-let pedidos = [];
-let produtos = [];
-let abaAtiva = 'separacao';
-let pedidoSeparacao = null;
-let pedidoRetirada = null;
-let produtoEmEdicao = null;
-let timerFila = null;
+let sessaoOp: Sessao | null = lerStorage<Sessao | null>(sessionStorage, CHAVE_SESSAO_OP, null); // { access_token, user }
+let lojas: Loja[] = [];
+let filialId: number | null = null;
+let pedidos: Pedido[] = [];
+let produtos: Produto[] = [];
+let abaAtiva: Aba = 'separacao';
+let pedidoSeparacao: Pedido | null = null;
+let pedidoRetirada: Pedido | null = null;
+let produtoEmEdicao: Produto | null = null;
+let timerFila: ReturnType<typeof setInterval> | null = null;
 let modoOffline = false;
 let sincronizando = false;
 
@@ -47,8 +47,8 @@ const apiFetch = criarApiFetch({
 window.addEventListener('load', async () => {
     document.getElementById('form-login').addEventListener('submit', entrar);
     document.getElementById('form-produto').addEventListener('submit', salvarProduto);
-    document.querySelectorAll('.aba-btn').forEach((btn) => {
-        btn.addEventListener('click', () => mudarAba(btn.dataset.aba));
+    document.querySelectorAll<HTMLElement>('.aba-btn').forEach((btn) => {
+        btn.addEventListener('click', () => mudarAba(btn.dataset.aba as Aba));
     });
     document.getElementById('input-leitor-sku').addEventListener('keydown', (e) => {
         if (e.key === 'Enter') concluirSeparacao();
@@ -66,7 +66,7 @@ window.addEventListener('load', async () => {
     }
     // Confere o token com o servidor antes de mostrar o painel.
     try {
-        const { user } = await apiFetch('/api/auth/me');
+        const { user } = await apiFetch<{ user: Usuario }>('/api/auth/me');
         if (!PAPEIS_PORTAL.includes(user.role)) throw new Error('Perfil sem acesso ao portal.');
         sessaoOp.user = user;
         await abrirPortal();
@@ -75,11 +75,11 @@ window.addEventListener('load', async () => {
     }
 });
 
-function mostrarLogin(mensagem) {
+function mostrarLogin(mensagem?: string): void {
     clearInterval(timerFila);
     document.getElementById('tela-portal').classList.add('hidden');
     document.getElementById('tela-login').classList.remove('hidden');
-    document.getElementById('op-senha').value = '';
+    (document.getElementById('op-senha') as HTMLInputElement).value = '';
     const erro = document.getElementById('erro-login');
     if (mensagem) {
         erro.textContent = mensagem;
@@ -90,12 +90,12 @@ function mostrarLogin(mensagem) {
     document.getElementById('op-email').focus();
 }
 
-async function entrar(event) {
+async function entrar(event: Event): Promise<void> {
     event.preventDefault();
-    const email = document.getElementById('op-email').value.trim();
-    const senha = document.getElementById('op-senha').value;
+    const email = (document.getElementById('op-email') as HTMLInputElement).value.trim();
+    const senha = (document.getElementById('op-senha') as HTMLInputElement).value;
     const erro = document.getElementById('erro-login');
-    const botao = document.getElementById('btn-login');
+    const botao = document.getElementById('btn-login') as HTMLButtonElement;
 
     if (!email || !senha) {
         erro.textContent = 'Informe e-mail e senha.';
@@ -105,7 +105,7 @@ async function entrar(event) {
 
     botao.disabled = true;
     try {
-        const payload = await apiFetch('/api/auth/login', {
+        const payload = await apiFetch<Sessao>('/api/auth/login', {
             method: 'POST',
             body: JSON.stringify({ email, password: senha, portal: 'operador' }),
         });
@@ -124,7 +124,7 @@ async function entrar(event) {
     }
 }
 
-function encerrarSessao(mensagem) {
+function encerrarSessao(mensagem?: string): void {
     sessaoOp = null;
     gravarStorage(sessionStorage, CHAVE_SESSAO_OP, null);
     pedidos = [];
@@ -132,12 +132,12 @@ function encerrarSessao(mensagem) {
     mostrarLogin(mensagem);
 }
 
-function sair() {
+function sair(): void {
     encerrarSessao();
     triggerToast('Sessão encerrada', 'Você saiu do portal.', 'warning');
 }
 
-async function abrirPortal() {
+async function abrirPortal(): Promise<void> {
     const { user } = sessaoOp;
     document.getElementById('tela-login').classList.add('hidden');
     document.getElementById('tela-portal').classList.remove('hidden');
@@ -149,23 +149,23 @@ async function abrirPortal() {
     document.getElementById('btn-liberar-reservas').classList.toggle('hidden', !podeCancelar());
 
     try {
-        lojas = (await apiFetch('/api/stores')).stores;
+        lojas = (await apiFetch<{ stores: Loja[] }>('/api/stores')).stores;
     } catch (err) {
         triggerToast('Servidor indisponível', err.message, 'warning');
         lojas = [];
     }
-    const select = document.getElementById('select-filial');
+    const select = document.getElementById('select-filial') as HTMLSelectElement;
     select.replaceChildren();
     lojas.forEach((l) => {
         const opt = document.createElement('option');
-        opt.value = l.id;
+        opt.value = String(l.id);
         opt.textContent = l.name.replace('MegaLoja - ', '');
         opt.className = 'text-slate-900';
         select.appendChild(opt);
     });
     const salva = Number(lerStorage(sessionStorage, CHAVE_FILIAL_OP, 0));
     filialId = lojas.find((l) => l.id === salva)?.id ?? lojas[0]?.id ?? null;
-    select.value = filialId;
+    select.value = String(filialId);
 
     mudarAba('separacao');
     if (!navigator.onLine) modoOffline = true;
@@ -178,21 +178,21 @@ async function abrirPortal() {
     }, 30000);
 }
 
-async function trocarFilial() {
-    filialId = Number(document.getElementById('select-filial').value);
+async function trocarFilial(): Promise<void> {
+    filialId = Number((document.getElementById('select-filial') as HTMLSelectElement).value);
     gravarStorage(sessionStorage, CHAVE_FILIAL_OP, filialId);
     pedidoRetirada = null;
     atualizarConferenciaRetirada();
     await recarregarPedidos();
 }
 
-function mudarAba(aba) {
+function mudarAba(aba: Aba): void {
     if (aba === 'produtos' && sessaoOp?.user.role !== 'empresa') return;
     abaAtiva = aba;
     ['separacao', 'retirada', 'pedidos', 'produtos'].forEach((nome) => {
         document.getElementById(`aba-${nome}`).classList.toggle('hidden', nome !== aba);
     });
-    document.querySelectorAll('.aba-btn').forEach((btn) => {
+    document.querySelectorAll<HTMLElement>('.aba-btn').forEach((btn) => {
         btn.className = `aba-btn px-4 py-2 rounded-lg whitespace-nowrap ${btn.dataset.aba === aba
             ? 'bg-amber-400 text-slate-950'
             : 'text-slate-300 hover:bg-slate-700'} ${btn.id === 'aba-btn-produtos' && sessaoOp?.user.role !== 'empresa' ? 'hidden' : ''}`;
@@ -203,10 +203,10 @@ function mudarAba(aba) {
 // ---------------------------------------------------------------------------
 // Pedidos da filial
 // ---------------------------------------------------------------------------
-async function recarregarPedidos(silencioso = false) {
+async function recarregarPedidos(silencioso = false): Promise<void> {
     if (!filialId) return;
     try {
-        const resp = await apiFetch(`/api/orders?store_id=${filialId}`);
+        const resp = await apiFetch<{ orders?: Pedido[] }>(`/api/orders?store_id=${filialId}`);
         pedidos = resp.orders || [];
         aplicarFilaLocal();
         gravarStorage(localStorage, CHAVE_CACHE_FILA, { filialId, pedidos, em: new Date().toISOString() });
@@ -223,8 +223,8 @@ async function recarregarPedidos(silencioso = false) {
 
     const pendentes = pedidos.filter((p) => ['aguardando_separacao', 'aguardando_preparacao'].includes(p.status));
     const prontos = pedidos.filter((p) => p.status === 'pronto_retirada');
-    document.getElementById('cnt-separacao').textContent = pendentes.length;
-    document.getElementById('cnt-retirada').textContent = prontos.length;
+    document.getElementById('cnt-separacao').textContent = String(pendentes.length);
+    document.getElementById('cnt-retirada').textContent = String(prontos.length);
 
     // Fila de separação: mais antigos primeiro.
     // S3-22: quem marcou horário de retirada vem primeiro (mais cedo antes); depois os mais antigos.
@@ -234,7 +234,7 @@ async function recarregarPedidos(silencioso = false) {
         if (b.pickup_slot) return 1;
         return a.id - b.id;
     });
-    const select = document.getElementById('select-pedido-separacao');
+    const select = document.getElementById('select-pedido-separacao') as HTMLSelectElement;
     const anterior = pedidoSeparacao?.id;
     select.replaceChildren();
     if (fila.length === 0) {
@@ -245,17 +245,17 @@ async function recarregarPedidos(silencioso = false) {
     }
     fila.forEach((p) => {
         const opt = document.createElement('option');
-        opt.value = p.id;
+        opt.value = String(p.id);
         opt.textContent = `Pedido #${String(p.id).padStart(4, '0')} • ${p.product_name} (${p.quantity} un.)${p.pickup_slot ? ` • retirada ${formatarSlot(p.pickup_slot)}` : ''}`;
         select.appendChild(opt);
     });
-    if (anterior && fila.some((p) => p.id === anterior)) select.value = anterior;
+    if (anterior && fila.some((p) => p.id === anterior)) select.value = String(anterior);
     selecionarPedidoParaSeparar();
     renderizarTabelaPedidos();
 }
 
-function renderizarTabelaPedidos() {
-    const filtro = document.getElementById('filtro-status').value;
+function renderizarTabelaPedidos(): void {
+    const filtro = (document.getElementById('filtro-status') as HTMLSelectElement).value;
     const lista = pedidos.filter((p) => !filtro || p.status === filtro);
     const corpo = document.getElementById('tabela-pedidos');
     corpo.replaceChildren();
@@ -280,8 +280,8 @@ function renderizarTabelaPedidos() {
 // ---------------------------------------------------------------------------
 // Separação
 // ---------------------------------------------------------------------------
-function selecionarPedidoParaSeparar() {
-    const id = Number(document.getElementById('select-pedido-separacao').value);
+function selecionarPedidoParaSeparar(): void {
+    const id = Number((document.getElementById('select-pedido-separacao') as HTMLSelectElement).value);
     pedidoSeparacao = pedidos.find((p) => p.id === id) || null;
     const p = pedidoSeparacao;
     document.getElementById('sep-prod-nome').textContent = p ? p.product_name : 'Nenhum pedido selecionado';
@@ -290,7 +290,7 @@ function selecionarPedidoParaSeparar() {
     document.getElementById('sep-prod-sku').textContent = p ? (p.product_sku || '---') : '---';
     document.getElementById('sep-prod-barcode').textContent = p ? (p.product_barcode || '---') : '---';
     const extra = document.getElementById('sep-info-extra');
-    const partes = [];
+    const partes: string[] = [];
     if (p?.pickup_slot) partes.push(`Retirada marcada para ${formatarSlot(p.pickup_slot)}`);
     if (p?.origin_store_name) partes.push(`Item vem de ${p.origin_store_name} (previsão ${p.transfer_eta_days} dia(s))`);
     if (p?.reserved_until) partes.push(`Separar até ${new Date(p.reserved_until + 'Z').toLocaleString('pt-BR')}`);
@@ -298,12 +298,12 @@ function selecionarPedidoParaSeparar() {
     extra.classList.toggle('hidden', partes.length === 0);
 }
 
-async function concluirSeparacao() {
+async function concluirSeparacao(): Promise<void> {
     if (!pedidoSeparacao) {
         triggerToast('Nada para separar', 'Selecione um pedido pendente.', 'warning');
         return;
     }
-    const codigo = document.getElementById('input-leitor-sku').value.trim();
+    const codigo = (document.getElementById('input-leitor-sku') as HTMLInputElement).value.trim();
     if (!codigo) {
         triggerToast('Conferência obrigatória', 'Leia o código de barras ou digite o SKU do item coletado.', 'warning');
         return;
@@ -313,7 +313,7 @@ async function concluirSeparacao() {
             method: 'POST',
             body: JSON.stringify({ barcode_or_sku: codigo }),
         });
-        document.getElementById('input-leitor-sku').value = '';
+        (document.getElementById('input-leitor-sku') as HTMLInputElement).value = '';
         triggerToast('Separação concluída', 'QR Code liberado para o cliente.', 'success');
         await recarregarPedidos();
     } catch (err) {
@@ -321,7 +321,7 @@ async function concluirSeparacao() {
     }
 }
 
-async function registrarFalta() {
+async function registrarFalta(): Promise<void> {
     if (!pedidoSeparacao) {
         triggerToast('Nada selecionado', 'Selecione o pedido com item em falta.', 'warning');
         return;
@@ -344,19 +344,19 @@ async function registrarFalta() {
 // ---------------------------------------------------------------------------
 // Retirada
 // ---------------------------------------------------------------------------
-function localizarPedidoRetirada(modo) {
-    let encontrado = null;
+function localizarPedidoRetirada(modo: string): void {
+    let encontrado: Pedido | null = null;
     const prontos = pedidos.filter((p) => p.status === 'pronto_retirada');
 
     if (modo === 'voucher') {
-        const voucher = document.getElementById('input-busca-voucher').value.trim().toUpperCase();
+        const voucher = (document.getElementById('input-busca-voucher') as HTMLInputElement).value.trim().toUpperCase();
         if (!voucher) {
             triggerToast('Campo vazio', 'Informe o código do QR Code.', 'warning');
             return;
         }
         encontrado = prontos.find((p) => (p.pickup_code || '').toUpperCase() === voucher);
     } else {
-        const termo = document.getElementById('input-busca-cpf').value.trim();
+        const termo = (document.getElementById('input-busca-cpf') as HTMLInputElement).value.trim();
         if (!termo) {
             triggerToast('Campo vazio', 'Informe o CPF ou o número do pedido.', 'warning');
             return;
@@ -378,10 +378,10 @@ function localizarPedidoRetirada(modo) {
     }
 }
 
-function atualizarConferenciaRetirada() {
+function atualizarConferenciaRetirada(): void {
     const p = pedidoRetirada;
     const alerta = document.getElementById('alerta-terceiro-balcao');
-    document.getElementById('chk-doc-conferido').checked = false;
+    (document.getElementById('chk-doc-conferido') as HTMLInputElement).checked = false;
 
     if (!p) {
         document.getElementById('ret-pedido-id').textContent = 'Nenhum pedido localizado';
@@ -399,16 +399,16 @@ function atualizarConferenciaRetirada() {
     }
 }
 
-async function darBaixaRetirada() {
+async function darBaixaRetirada(): Promise<void> {
     if (!pedidoRetirada) {
         triggerToast('Nada localizado', 'Localize um pedido pronto antes de dar baixa.', 'warning');
         return;
     }
-    if (!document.getElementById('chk-doc-conferido').checked) {
+    if (!(document.getElementById('chk-doc-conferido') as HTMLInputElement).checked) {
         triggerToast('Conferência obrigatória', 'Confira o documento com foto antes de confirmar a entrega.', 'warning');
         return;
     }
-    const corpo = {
+    const corpo: CorpoBaixa = {
         order_id: pedidoRetirada.id,
         document_checked: true,
         is_third_party: Boolean(pedidoRetirada.third_party_name),
@@ -426,8 +426,8 @@ async function darBaixaRetirada() {
         triggerToast('Entrega concluída', 'Baixa registrada com sucesso.', 'success');
         pedidoRetirada = null;
         atualizarConferenciaRetirada();
-        document.getElementById('input-busca-voucher').value = '';
-        document.getElementById('input-busca-cpf').value = '';
+        (document.getElementById('input-busca-voucher') as HTMLInputElement).value = '';
+        (document.getElementById('input-busca-cpf') as HTMLInputElement).value = '';
         await recarregarPedidos();
     } catch (err) {
         if (err.status === undefined) {
@@ -439,7 +439,7 @@ async function darBaixaRetirada() {
     }
 }
 
-async function expirarPedido() {
+async function expirarPedido(): Promise<void> {
     if (!podeCancelar()) {
         triggerToast('Sem permissão', 'Somente gerente ou empresa cancelam pedidos.', 'warning');
         return;
@@ -463,9 +463,9 @@ async function expirarPedido() {
 // ---------------------------------------------------------------------------
 // Produtos e preços (perfil empresa)
 // ---------------------------------------------------------------------------
-async function carregarProdutos() {
+async function carregarProdutos(): Promise<void> {
     try {
-        produtos = (await apiFetch('/api/products?include=stock')).products;
+        produtos = (await apiFetch<{ products: Produto[] }>('/api/products?include=stock')).products;
     } catch (err) {
         triggerToast('Não foi possível carregar os produtos', err.message, 'warning');
         return;
@@ -473,7 +473,7 @@ async function carregarProdutos() {
     renderizarTabelaProdutos();
 }
 
-function renderizarTabelaProdutos() {
+function renderizarTabelaProdutos(): void {
     const corpo = document.getElementById('tabela-produtos');
     corpo.replaceChildren();
     produtos.forEach((p) => {
@@ -498,9 +498,9 @@ function renderizarTabelaProdutos() {
     });
 }
 
-function atualizarPreviaImagem() {
-    const url = document.getElementById('prod-imagem').value.trim();
-    const img = document.getElementById('prod-imagem-previa');
+function atualizarPreviaImagem(): void {
+    const url = (document.getElementById('prod-imagem') as HTMLInputElement).value.trim();
+    const img = document.getElementById('prod-imagem-previa') as HTMLImageElement;
     if (/^https?:\/\//i.test(url)) {
         img.src = url;
         img.classList.remove('hidden');
@@ -510,9 +510,9 @@ function atualizarPreviaImagem() {
     }
 }
 
-function abrirFormularioProduto(produto) {
+function abrirFormularioProduto(produto?: Produto): void {
     produtoEmEdicao = produto;
-    document.getElementById('form-produto').reset();
+    (document.getElementById('form-produto') as HTMLFormElement).reset();
     document.getElementById('erro-produto').classList.add('hidden');
     document.getElementById('titulo-form-produto').textContent = produto ? `Editar produto #${produto.id}` : 'Novo produto';
 
@@ -520,12 +520,12 @@ function abrirFormularioProduto(produto) {
     const datalist = document.getElementById('lista-categorias');
     datalist.replaceChildren(...categorias.map((c) => Object.assign(document.createElement('option'), { value: c })));
 
-    document.getElementById('prod-nome').value = produto?.name ?? '';
-    document.getElementById('prod-categoria').value = produto?.category ?? '';
-    document.getElementById('prod-preco').value = produto ? Number(produto.price).toFixed(2).replace('.', ',') : '';
-    document.getElementById('prod-sku').value = produto?.sku ?? '';
-    document.getElementById('prod-barcode').value = produto?.barcode ?? '';
-    document.getElementById('prod-imagem').value = produto?.image_url ?? '';
+    (document.getElementById('prod-nome') as HTMLInputElement).value = produto?.name ?? '';
+    (document.getElementById('prod-categoria') as HTMLInputElement).value = produto?.category ?? '';
+    (document.getElementById('prod-preco') as HTMLInputElement).value = produto ? Number(produto.price).toFixed(2).replace('.', ',') : '';
+    (document.getElementById('prod-sku') as HTMLInputElement).value = produto?.sku ?? '';
+    (document.getElementById('prod-barcode') as HTMLInputElement).value = produto?.barcode ?? '';
+    (document.getElementById('prod-imagem') as HTMLInputElement).value = produto?.image_url ?? '';
     atualizarPreviaImagem();
 
     const box = document.getElementById('prod-estoques');
@@ -540,7 +540,7 @@ function abrirFormularioProduto(produto) {
         campo.type = 'number';
         campo.min = '0';
         campo.step = '1';
-        campo.dataset.loja = l.id;
+        campo.dataset.loja = String(l.id);
         campo.value = produto ? String(produto.stocks?.[l.id] ?? 0) : '0';
         campo.className = 'w-20 px-2 py-1 border border-gray-300 rounded-lg text-right font-mono focus:outline-none focus:border-amber-500';
         campo.setAttribute('aria-label', `Estoque em ${l.name}`);
@@ -554,30 +554,30 @@ function abrirFormularioProduto(produto) {
     document.getElementById('prod-nome').focus();
 }
 
-function fecharFormularioProduto() {
+function fecharFormularioProduto(): void {
     const modal = document.getElementById('modal-produto');
     modal.classList.add('hidden');
     modal.classList.remove('flex');
 }
 
-async function salvarProduto(event) {
+async function salvarProduto(event: Event): Promise<void> {
     event.preventDefault();
     const erro = document.getElementById('erro-produto');
-    const botao = document.getElementById('btn-salvar-produto');
+    const botao = document.getElementById('btn-salvar-produto') as HTMLButtonElement;
     erro.classList.add('hidden');
 
-    const stock = {};
-    document.querySelectorAll('#prod-estoques input').forEach((campo) => {
+    const stock: Record<string, number> = {};
+    document.querySelectorAll<HTMLInputElement>('#prod-estoques input').forEach((campo) => {
         stock[campo.dataset.loja] = campo.value === '' ? 0 : Number(campo.value);
     });
 
     const corpo = {
-        name: document.getElementById('prod-nome').value.trim(),
-        category: document.getElementById('prod-categoria').value.trim(),
-        price: document.getElementById('prod-preco').value.trim(),
-        sku: document.getElementById('prod-sku').value.trim(),
-        barcode: document.getElementById('prod-barcode').value.trim(),
-        image_url: document.getElementById('prod-imagem').value.trim(),
+        name: (document.getElementById('prod-nome') as HTMLInputElement).value.trim(),
+        category: (document.getElementById('prod-categoria') as HTMLInputElement).value.trim(),
+        price: (document.getElementById('prod-preco') as HTMLInputElement).value.trim(),
+        sku: (document.getElementById('prod-sku') as HTMLInputElement).value.trim(),
+        barcode: (document.getElementById('prod-barcode') as HTMLInputElement).value.trim(),
+        image_url: (document.getElementById('prod-imagem') as HTMLInputElement).value.trim(),
         stock,
     };
 
@@ -614,13 +614,13 @@ async function salvarProduto(event) {
 // ---------------------------------------------------------------------------
 // Janela de retirada, prazo de reserva e histórico (S3-22, S3-24, S3-17)
 // ---------------------------------------------------------------------------
-function formatarSlot(slot) {
+function formatarSlot(slot: string): string {
     // slot = AAAA-MM-DDTHH:00 (horário de Brasília)
     return `${slot.slice(8, 10)}/${slot.slice(5, 7)} ${slot.slice(11, 16)}`;
 }
 
-function descreverPrazo(p) {
-    const partes = [];
+function descreverPrazo(p: Pedido): string {
+    const partes: string[] = [];
     if (p.pickup_slot) partes.push(`<span class="font-bold text-blue-700">Retirada ${esc(formatarSlot(p.pickup_slot))}</span>`);
     if (p.reserved_until) {
         const vencida = new Date(p.reserved_until + 'Z').getTime() < Date.now();
@@ -630,11 +630,11 @@ function descreverPrazo(p) {
     return partes.length ? partes.join('<br>') : '—';
 }
 
-async function liberarReservasVencidas() {
+async function liberarReservasVencidas(): Promise<void> {
     if (!podeCancelar()) return;
     if (!confirm('Cancelar os pedidos que a loja não separou no prazo e devolver o estoque?')) return;
     try {
-        const resp = await apiFetch('/api/orders/expire-overdue', { method: 'POST' });
+        const resp = await apiFetch<{ expired: unknown[]; hours: number }>('/api/orders/expire-overdue', { method: 'POST' });
         triggerToast(
             resp.expired.length ? 'Reservas liberadas' : 'Nada a liberar',
             resp.expired.length
@@ -648,11 +648,11 @@ async function liberarReservasVencidas() {
     }
 }
 
-async function abrirHistorico(pedido) {
+async function abrirHistorico(pedido: Pedido): Promise<void> {
     document.getElementById('titulo-historico').textContent = `Histórico do pedido #${String(pedido.id).padStart(4, '0')}`;
     const auditoria = document.getElementById('lista-auditoria');
     const notificacoes = document.getElementById('lista-notificacoes');
-    const aviso = (texto) => Object.assign(document.createElement('li'), { textContent: texto, className: 'text-gray-400' });
+    const aviso = (texto: string) => Object.assign(document.createElement('li'), { textContent: texto, className: 'text-gray-400' });
     auditoria.replaceChildren(aviso('Carregando...'));
     notificacoes.replaceChildren(aviso('Carregando...'));
     const modal = document.getElementById('modal-historico');
@@ -660,8 +660,8 @@ async function abrirHistorico(pedido) {
     modal.classList.add('flex');
 
     const [aud, not] = await Promise.allSettled([
-        apiFetch(`/api/orders/${pedido.id}/audit`),
-        apiFetch(`/api/orders/${pedido.id}/notifications`),
+        apiFetch<{ audit: Auditoria[] }>(`/api/orders/${pedido.id}/audit`),
+        apiFetch<{ notifications: Notificacao[] }>(`/api/orders/${pedido.id}/notifications`),
     ]);
 
     if (aud.status === 'fulfilled') {
@@ -693,13 +693,13 @@ async function abrirHistorico(pedido) {
     }
 }
 
-function fecharHistorico() {
+function fecharHistorico(): void {
     const modal = document.getElementById('modal-historico');
     modal.classList.add('hidden');
     modal.classList.remove('flex');
 }
 
-function mensagemDeErro(err) {
+function mensagemDeErro(err: ErroApi): string {
     return err.status === undefined
         ? 'Sem conexão com o servidor. Esta ação precisa de internet.'
         : err.message;
@@ -711,43 +711,43 @@ function mensagemDeErro(err) {
 // valendo e as baixas de retirada ficam numa fila local; ao voltar a internet
 // elas são enviadas (o servidor ainda confere e impede baixa em duplicidade).
 // ---------------------------------------------------------------------------
-function lerFilaOffline() {
-    const fila = lerStorage(localStorage, CHAVE_FILA_OFFLINE, []);
+function lerFilaOffline(): BaixaOffline[] {
+    const fila = lerStorage<BaixaOffline[]>(localStorage, CHAVE_FILA_OFFLINE, []);
     return Array.isArray(fila) ? fila : [];
 }
 
-function gravarFilaOffline(fila) {
+function gravarFilaOffline(fila: BaixaOffline[]): void {
     gravarStorage(localStorage, CHAVE_FILA_OFFLINE, fila.length ? fila : null);
     atualizarFaixaOffline();
 }
 
-function aplicarFilaLocal() {
+function aplicarFilaLocal(): void {
     const baixados = new Set(lerFilaOffline().map((b) => b.order_id));
     pedidos.forEach((p) => {
         if (baixados.has(p.id) && p.status === 'pronto_retirada') p.status = 'entregue_cliente';
     });
 }
 
-function usarCacheOffline() {
-    const cache = lerStorage(localStorage, CHAVE_CACHE_FILA, null);
+function usarCacheOffline(): boolean {
+    const cache = lerStorage<CacheFila | null>(localStorage, CHAVE_CACHE_FILA, null);
     if (!cache || cache.filialId !== filialId || !Array.isArray(cache.pedidos)) return false;
     pedidos = cache.pedidos;
     definirOffline(true);
     return true;
 }
 
-function definirOffline(valor) {
+function definirOffline(valor: boolean): void {
     const mudou = modoOffline !== valor;
     modoOffline = valor;
     atualizarFaixaOffline();
     if (mudou && !valor) sincronizarFilaOffline(false);
 }
 
-function atualizarFaixaOffline() {
+function atualizarFaixaOffline(): void {
     const faixa = document.getElementById('faixa-offline');
     if (!faixa) return;
     const fila = lerFilaOffline();
-    const cache = lerStorage(localStorage, CHAVE_CACHE_FILA, null);
+    const cache = lerStorage<CacheFila | null>(localStorage, CHAVE_CACHE_FILA, null);
     const texto = document.getElementById('txt-offline');
     const botao = document.getElementById('btn-sincronizar');
 
@@ -762,7 +762,7 @@ function atualizarFaixaOffline() {
     botao.classList.toggle('hidden', fila.length === 0);
 }
 
-function enfileirarBaixa(corpo) {
+function enfileirarBaixa(corpo: CorpoBaixa): void {
     const fila = lerFilaOffline();
     if (fila.some((b) => b.order_id === corpo.order_id)) {
         triggerToast('Já registrada', 'Esta baixa já está na fila para envio.', 'warning');
@@ -775,17 +775,17 @@ function enfileirarBaixa(corpo) {
     triggerToast('Baixa guardada (offline)', 'Será enviada ao servidor quando a conexão voltar.', 'warning');
 }
 
-async function renderizarFilaAposBaixa() {
+async function renderizarFilaAposBaixa(): Promise<void> {
     pedidoRetirada = null;
     atualizarConferenciaRetirada();
-    document.getElementById('input-busca-voucher').value = '';
-    document.getElementById('input-busca-cpf').value = '';
+    (document.getElementById('input-busca-voucher') as HTMLInputElement).value = '';
+    (document.getElementById('input-busca-cpf') as HTMLInputElement).value = '';
     const prontos = pedidos.filter((p) => p.status === 'pronto_retirada');
-    document.getElementById('cnt-retirada').textContent = prontos.length;
+    document.getElementById('cnt-retirada').textContent = String(prontos.length);
     renderizarTabelaPedidos();
 }
 
-async function sincronizarFilaOffline(manual) {
+async function sincronizarFilaOffline(manual: boolean): Promise<void> {
     const fila = lerFilaOffline();
     if (sincronizando || fila.length === 0) {
         if (manual && fila.length === 0) triggerToast('Tudo em dia', 'Não há baixas aguardando envio.', 'success');
@@ -793,9 +793,9 @@ async function sincronizarFilaOffline(manual) {
     }
     sincronizando = true;
     let enviadas = 0;
-    const restantes = [];
+    const restantes: BaixaOffline[] = [];
     let semConexao = false;
-    const problemas = [];
+    const problemas: string[] = [];
 
     for (const baixa of fila) {
         if (semConexao) {
