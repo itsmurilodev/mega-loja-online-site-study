@@ -173,6 +173,8 @@
                             <label for="input-busca-voucher" class="text-[10px] font-black text-gray-500 uppercase block mb-1">QR Code / voucher do cliente</label>
                             <div class="flex gap-2">
                                 <input type="text" id="input-busca-voucher" autocomplete="off" placeholder="Ex.: HV-0001-XXXX-XXXX" class="flex-1 px-3 py-2.5 border border-gray-300 rounded-xl text-xs font-mono focus:outline-none focus:border-emerald-600">
+                                <button type="button" onclick="abrirLeitorQr()" class="bg-gray-800 hover:bg-gray-900 text-white px-4 py-2 rounded-xl text-xs font-bold"><i class="fa-solid fa-camera mr-1"></i> Ler QR</button>
+                        
                                 <button type="button" onclick="localizarPedidoRetirada('voucher')" class="bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2 rounded-xl text-xs font-bold"><i class="fa-solid fa-magnifying-glass mr-1"></i> Buscar</button>
                             </div>
                         </div>
@@ -351,7 +353,18 @@
         </div>
     </div>
 
+       <div id="modal-leitor-qr" class="hidden fixed inset-0 z-50 bg-black/80 flex items-center justify-center p-4" role="dialog" aria-modal="true" aria-label="Leitor de QR Code">
+        <div class="bg-white rounded-2xl p-4 w-full max-w-sm space-y-3">
+            <p class="text-xs font-bold text-gray-900">Aponte a câmera para o QR Code do cliente</p>
+            <video id="video-leitor-qr" class="w-full rounded-xl bg-black aspect-square object-cover" playsinline muted></video>
+            <canvas id="canvas-leitor-qr" class="hidden"></canvas>
+            <button type="button" onclick="fecharLeitorQr()" class="w-full bg-gray-800 hover:bg-gray-900 text-white py-2.5 rounded-xl text-xs font-bold">Cancelar</button>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js"></script>
     <script src="js/common.js"></script>
     <script src="js/operador.js"></script>
+    <script src="js/leitor-qr.js"></script>
 </body>
 </html>
