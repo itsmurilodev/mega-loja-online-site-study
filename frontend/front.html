@@ -263,6 +263,28 @@
                         </div>
                     </div>
                 </div>
+                <section id="avaliacoes" class="pt-4 border-t border-gray-200/60 space-y-3">
+  <h3 class="text-sm font-bold text-gray-900">Avaliações</h3>
+  <div id="media-avaliacoes" class="text-xs font-medium text-gray-700"></div>
+  <ul id="lista-avaliacoes" class="space-y-2 text-xs text-gray-700"></ul>
+
+  <form id="form-avaliacao" class="space-y-2" hidden>
+    <div class="estrelas" role="radiogroup" aria-label="Nota">
+      <input type="radio" id="n5" name="nota" value="5"><label for="n5">★</label>
+      <input type="radio" id="n4" name="nota" value="4"><label for="n4">★</label>
+      <input type="radio" id="n3" name="nota" value="3"><label for="n3">★</label>
+      <input type="radio" id="n2" name="nota" value="2"><label for="n2">★</label>
+      <input type="radio" id="n1" name="nota" value="1"><label for="n1">★</label>
+    </div>
+    <textarea name="comentario" maxlength="500" placeholder="Conte como foi"
+      class="w-full rounded-lg border border-gray-200 p-2 text-xs"></textarea>
+    <input type="file" name="foto" accept="image/*" class="text-xs">
+    <button type="submit"
+      class="px-3 py-2 rounded-lg bg-emerald-700 text-white text-xs font-bold">
+      Enviar avaliação
+    </button>
+  </form>
+</section>
 
                 <!-- Disponibilidade na filial escolhida -->
                 <div class="flex items-center justify-between text-xs bg-gray-50 border border-gray-200 rounded-xl px-3 py-2.5">
