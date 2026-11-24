@@ -39,6 +39,7 @@ import {
   UpdateOrderStatusDto,
   ValidatePickupDto,
 } from "./dto/order.dto";
+import { OrderAccessService } from "./order-access.service";
 import { ThirdPartyCodeService } from "./third-party-code.service";
 
 const STATUS_ENCERRADOS = [
@@ -92,7 +93,8 @@ export class OrdersService {
     private readonly pixService: PixService,
     private readonly thirdPartyCodeService: ThirdPartyCodeService,
     private readonly schema: SchemaService,
-    private readonly audit: AuditService
+    private readonly audit: AuditService,
+    private readonly orderAccess: OrderAccessService
   ) {}
 
   private nowIso(): string {
@@ -923,7 +925,11 @@ export class OrdersService {
       throw err;
     }
 
-    return criados;
+    // Só a resposta da compra leva a chave de acesso de cada pedido.
+    return criados.map((o) => ({
+      ...o,
+      access_token: this.orderAccess.tokenFor(o.id),
+    }));
   }
 
   /**
@@ -1444,13 +1450,13 @@ export class OrdersService {
       .select(this.ORDER_SELECT)
       .eq("delivery_method", "retirar_na_loja")
       .in("status", STATUS_AGUARDANDO)
-      .lt("created_at", cortePreparo);
+      .lte("created_at", cortePreparo);
     let qRetirada = supabase
       .from("orders")
       .select(this.ORDER_SELECT)
       .eq("delivery_method", "retirar_na_loja")
       .eq("status", "pronto_retirada")
-      .lt("updated_at", corteRetirada);
+      .lte("updated_at", corteRetirada);
     if (options.orderId) {
       qPreparo = qPreparo.eq("id", options.orderId);
       qRetirada = qRetirada.eq("id", options.orderId);

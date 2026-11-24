@@ -84,8 +84,8 @@ backend/
 | `POST` | `/api/orders/checkout` | **S3-30** | Carrinho com vários itens: confere todo o estoque, cobra uma vez e cria um pedido por item |
 | `GET` | `/api/orders/mine` | S3-27 · papel `cliente` | Pedidos do cliente logado (pelo CPF do cadastro) |
 | `GET` | `/api/orders` | RF005 · papel `operador`/`gerente`/`empresa` | Lista pedidos com join de produto e filial (`?store_id=` e `?status=`) |
-| `GET` | `/api/orders/:id` | RF005 | Detalhes completos de um pedido específico |
-| `GET` | `/api/orders/:id/notifications` | RF004 | Histórico de notificações do pedido |
+| `GET` | `/api/orders/:id` | RF005 · **privacidade** | Detalhes de um pedido. Exige login de colaborador, login do cliente dono (mesmo CPF) ou o cabeçalho `X-Order-Token` devolvido pela compra (`401` sem nada disso) |
+| `GET` | `/api/orders/:id/notifications` | RF004 · **privacidade** | Histórico de notificações do pedido (mesma regra de acesso) |
 | `POST` | `/api/orders/quote` | **S3-23** | Total a pagar (itens + frete simulado), sem criar nada |
 | `POST` | `/api/orders/third-party-code` | **S3-18** | Gera o código de confirmação do terceiro (envio por e-mail **simulado**) |
 | `POST` | `/api/payments/pix` | **S3-23** | Cobrança Pix **simulada** (token assinado, expira em 5 min) |
@@ -101,4 +101,4 @@ backend/
 | `POST` | `/api/orders/:id/expire` | Abandono · `gerente`/`empresa` | Expirar pedido por não-comparecimento (7 dias) e devolver item ao estoque |
 | `PATCH` | `/api/orders/:id/status` | Compatibilidade | Atualização genérica de status delegando para os casos de uso oficiais |
 
-**Autenticação (S3-14 / S3-16):** `separate`, `rupture`, `validate-pickup` (e o alias `pickup`), `PATCH status` e a listagem `GET /api/orders` exigem `Authorization: Bearer <access_token>` de uma conta `operador`, `gerente` ou `empresa`; `expire`, `expire-overdue` e o cancelamento por `PATCH status` exigem `gerente` ou `empresa` (`401` sem token ou token inválido, `403` com papel errado). `POST/PATCH /api/products` exigem `empresa`. Criar pedido e consultar um pedido continuam abertos para o cliente. Contas de operador/empresa são criadas com `npm run seed:usuario` (ver README da raiz).
+**Autenticação (S3-14 / S3-16):** `separate`, `rupture`, `validate-pickup` (e o alias `pickup`), `PATCH status` e a listagem `GET /api/orders` exigem `Authorization: Bearer <access_token>` de uma conta `operador`, `gerente` ou `empresa`; `expire`, `expire-overdue` e o cancelamento por `PATCH status` exigem `gerente` ou `empresa` (`401` sem token ou token inválido, `403` com papel errado). `POST/PATCH /api/products` exigem `empresa`. Criar pedido continua aberto para o cliente. Ler um pedido (nome, CPF, voucher) exige a chave de acesso que a própria compra devolve em `access_token` (enviada depois no cabeçalho `X-Order-Token`), ou login de colaborador, ou login do cliente dono do pedido. Contas de operador/empresa são criadas com `npm run seed:usuario` (ver README da raiz).
