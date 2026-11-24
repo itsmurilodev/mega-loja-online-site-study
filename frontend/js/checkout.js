@@ -430,7 +430,7 @@ async function finalizarCompra() {
         const resp = await apiFetch('/api/orders/checkout', { method: 'POST', body: JSON.stringify(corpo) });
 
         const criados = resp.orders || [];
-        guardarPedidosLocais(criados.map((o) => o.id));
+        guardarPedidosLocais(criados);
         pedidosNovos = criados.map((o) => o.id);
 
         // Abate o estoque na memória (da filial ou da origem da transferência) para a vitrine refletir a compra.

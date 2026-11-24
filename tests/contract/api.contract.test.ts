@@ -46,9 +46,10 @@ async function chamar(
   metodo: string,
   caminho: string,
   corpo?: unknown,
-  token: string | null = API_TOKEN || null
+  token: string | null = API_TOKEN || null,
+  extraHeaders: Record<string, string> = {}
 ): Promise<Resposta> {
-  const headers: Record<string, string> = { "Content-Type": "application/json" };
+  const headers: Record<string, string> = { "Content-Type": "application/json", ...extraHeaders };
   if (token) headers.Authorization = `Bearer ${token}`;
   const resposta = await fetch(`${API_URL}${caminho}`, {
     method: metodo,
@@ -325,6 +326,9 @@ describe("Protecao dos endpoints do operador e da empresa (S3-14)", () => {
   const protegidos: [string, string, unknown][] = [
     ["GET", "/api/orders", undefined],
     ["GET", "/api/orders/mine", undefined],
+    // Privacidade: nome, CPF, voucher e notificacoes nao saem sem login nem chave do pedido.
+    ["GET", "/api/orders/1", undefined],
+    ["GET", "/api/orders/1/notifications", undefined],
     ["POST", "/api/orders/1/separate", { barcode_or_sku: "X" }],
     ["POST", "/api/orders/1/rupture", { reason: "teste" }],
     ["POST", "/api/orders/1/expire", {}],
@@ -1005,5 +1009,50 @@ describe.skipIf(!podeEscrever)("Com a migracao 001: janela, entrega, transferenc
     const geral = await comoGerente("GET", "/api/audit?limit=5");
     expect(geral.status).toBe(200);
     expect(Array.isArray(geral.body.audit)).toBe(true);
+  });
+});
+
+// Privacidade: o pedido so abre para colaborador, cliente dono ou quem tem a chave devolvida pela compra.
+describe("Privacidade dos pedidos abertos", () => {
+  it("sem login e sem chave nao vaza nome nem CPF (401, sem dados do cliente)", async () => {
+    const resposta = await chamar("GET", "/api/orders/1", undefined, null);
+    esperarErro(resposta, 401);
+    expect(JSON.stringify(resposta.body)).not.toMatch(/customer_name|customer_cpf|pickup_code/);
+  });
+
+  it("chave invalida no cabecalho tambem responde 401", async () => {
+    esperarErro(
+      await chamar("GET", "/api/orders/1", undefined, null, { "X-Order-Token": "chave-falsa" }),
+      401
+    );
+  });
+
+  it.skipIf(!podeEscrever)("a compra devolve a chave e so ela (ou o colaborador) abre o pedido", async () => {
+    const compra = await post("/api/orders", pedidoValido());
+    expect(compra.status).toBe(201);
+    const { id, access_token: chave } = compra.body.order;
+    expect(chave).toEqual(expect.any(String));
+
+    const comChave = await chamar("GET", `/api/orders/${id}`, undefined, null, { "X-Order-Token": chave });
+    expect(comChave.status).toBe(200);
+    expect(comChave.body.order.customer_cpf).toBe(CPF_TITULAR);
+    expect(comChave.body.order.access_token).toBeUndefined();
+
+    const notificacoes = await chamar("GET", `/api/orders/${id}/notifications`, undefined, null, { "X-Order-Token": chave });
+    expect(notificacoes.status).toBe(200);
+
+    // A chave de um pedido nao abre outro.
+    esperarErro(
+      await chamar("GET", `/api/orders/${id + 1}`, undefined, null, { "X-Order-Token": chave }),
+      401
+    );
+    esperarErro(await chamar("GET", `/api/orders/${id}`, undefined, null), 401);
+
+    // Colaborador continua vendo tudo, e a listagem nao devolve a chave.
+    const comoOperador = await get(`/api/orders/${id}`);
+    expect(comoOperador.status).toBe(200);
+    expect(comoOperador.body.order.access_token).toBeUndefined();
+
+    await comoGerente("POST", `/api/orders/${id}/expire`);
   });
 });

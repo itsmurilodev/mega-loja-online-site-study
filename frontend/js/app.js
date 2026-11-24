@@ -727,10 +727,26 @@ function atualizarLayoutFocoLoja() {
 // ---------------------------------------------------------------------------
 // Meus pedidos
 // ---------------------------------------------------------------------------
-function guardarPedidosLocais(ids) {
-    const atuais = lerStorage(localStorage, CHAVE_PEDIDOS, []);
-    const todos = [...new Set([...(Array.isArray(atuais) ? atuais : []), ...ids])];
-    gravarStorage(localStorage, CHAVE_PEDIDOS, todos.slice(-50));
+// Privacidade: o servidor só mostra um pedido a quem tem a chave de acesso que a compra
+// devolveu. Guardamos { idDoPedido: chave } neste navegador (a lista antiga só com ids não vale mais).
+function chavesDePedidos() {
+    const atuais = lerStorage(localStorage, CHAVE_PEDIDOS, {});
+    return atuais && typeof atuais === 'object' && !Array.isArray(atuais) ? atuais : {};
+}
+
+function guardarPedidosLocais(pedidos) {
+    const chaves = chavesDePedidos();
+    pedidos.forEach((p) => {
+        if (p.access_token) chaves[p.id] = p.access_token;
+    });
+    const ids = Object.keys(chaves).sort((a, b) => Number(a) - Number(b)).slice(-50);
+    gravarStorage(localStorage, CHAVE_PEDIDOS, Object.fromEntries(ids.map((id) => [id, chaves[id]])));
+}
+
+/** Cabeçalho com a chave do pedido (quando este navegador a tem). */
+function cabecalhoDoPedido(id) {
+    const chave = chavesDePedidos()[id];
+    return chave ? { 'X-Order-Token': chave } : {};
 }
 
 async function abrirPedidos(pedidosJaCarregados) {
@@ -752,15 +768,17 @@ async function carregarPedidosCliente(mostrarAviso, jaCarregados = []) {
             (minhas.orders || []).forEach((o) => mapa.set(o.id, o));
         }
 
-        const idsLocais = lerStorage(localStorage, CHAVE_PEDIDOS, []);
-        const faltando = (Array.isArray(idsLocais) ? idsLocais : []).filter((id) => !mapa.has(id));
-        const resultados = await Promise.allSettled(faltando.map((id) => apiFetch(`/api/orders/${id}`)));
+        const idsLocais = Object.keys(chavesDePedidos()).map(Number);
+        const faltando = idsLocais.filter((id) => !mapa.has(id));
+        const resultados = await Promise.allSettled(
+            faltando.map((id) => apiFetch(`/api/orders/${id}`, { headers: cabecalhoDoPedido(id) }))
+        );
         resultados.forEach((r) => {
             if (r.status === 'fulfilled') mapa.set(r.value.order.id, r.value.order);
         });
         // Pedidos já carregados também ganham o status mais recente.
         if (jaCarregados.length > 0) {
-            const atualizados = await Promise.allSettled(jaCarregados.map((o) => apiFetch(`/api/orders/${o.id}`)));
+            const atualizados = await Promise.allSettled(jaCarregados.map((o) => apiFetch(`/api/orders/${o.id}`, { headers: cabecalhoDoPedido(o.id) })));
             atualizados.forEach((r) => {
                 if (r.status === 'fulfilled') mapa.set(r.value.order.id, r.value.order);
             });
@@ -787,7 +805,7 @@ async function carregarPedidosCliente(mostrarAviso, jaCarregados = []) {
 /** S3-10: notificações de cada pedido (o aviso do QR é um mock; o texto avisa isso). */
 async function buscarNotificacoes(pedidos) {
     const mapa = new Map();
-    const resultados = await Promise.allSettled(pedidos.map((p) => apiFetch(`/api/orders/${p.id}/notifications`)));
+    const resultados = await Promise.allSettled(pedidos.map((p) => apiFetch(`/api/orders/${p.id}/notifications`, { headers: cabecalhoDoPedido(p.id) })));
     resultados.forEach((r, i) => {
         if (r.status === 'fulfilled') mapa.set(pedidos[i].id, r.value.notifications || []);
     });

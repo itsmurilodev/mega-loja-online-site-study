@@ -13,7 +13,7 @@ async function getNestApp(): Promise<INestApplication> {
     app.enableCors({
       origin: "*",
       methods: "GET,POST,PATCH,OPTIONS",
-      allowedHeaders: "Content-Type, Authorization",
+      allowedHeaders: "Content-Type, Authorization, X-Order-Token",
     });
     await app.init();
     cachedApp = app;

@@ -32,7 +32,7 @@ export async function bootstrap(): Promise<void> {
   app.enableCors({
     origin: "*",
     methods: "GET,POST,PATCH,OPTIONS",
-    allowedHeaders: "Content-Type, Authorization",
+    allowedHeaders: "Content-Type, Authorization, X-Order-Token",
     exposedHeaders:
       "X-Response-Time-Ms, X-RNF001-SLA-Limit-Ms, X-RNF001-Compliant, X-Transport-Security-Protocol",
   });

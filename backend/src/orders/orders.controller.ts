@@ -9,11 +9,14 @@ import {
   Patch,
   Post,
   Query,
+  NotFoundException,
   Req,
+  UnauthorizedException,
   UseGuards,
 } from "@nestjs/common";
-import { AuthUser } from "../auth/auth.types";
-import { Roles, RolesGuard } from "../auth/roles.guard";
+import { AuthService } from "../auth/auth.service";
+import { AuthUser, STAFF_ROLES } from "../auth/auth.types";
+import { extractBearerToken, Roles, RolesGuard } from "../auth/roles.guard";
 import { NotificationRow, OrderView } from "../common/constants";
 import { AuditEntry, AuditService } from "../supabase/audit.service";
 import {
@@ -25,6 +28,7 @@ import {
   UpdateOrderStatusDto,
   ValidatePickupDto,
 } from "./dto/order.dto";
+import { OrderAccessService } from "./order-access.service";
 import { OrdersService } from "./orders.service";
 import {
   ThirdPartyCodeResult,
@@ -37,7 +41,9 @@ export class OrdersController {
   constructor(
     private readonly ordersService: OrdersService,
     private readonly thirdPartyCodeService: ThirdPartyCodeService,
-    private readonly auditService: AuditService
+    private readonly auditService: AuditService,
+    private readonly authService: AuthService,
+    private readonly orderAccess: OrderAccessService
   ) {}
 
   private parseId(rawId: string): number {
@@ -45,6 +51,47 @@ export class OrdersController {
       throw new BadRequestException("ID invalido na URL.");
     }
     return Number(rawId);
+  }
+
+  /**
+   * Privacidade: ler um pedido (nome, CPF, voucher, notificações) exige ser
+   * colaborador, o cliente dono do pedido (login com o mesmo CPF) ou ter a chave
+   * de acesso que a compra devolveu (cabeçalho X-Order-Token). Sem nada disso: 401.
+   * Quem tem login mas não é dono recebe 404, para não revelar que o pedido existe.
+   */
+  private async authorizeOrderRead(
+    request: { headers?: Record<string, string | string[] | undefined> },
+    orderId: number
+  ): Promise<void> {
+    const rawKey = request.headers?.["x-order-token"];
+    const chave = Array.isArray(rawKey) ? rawKey[0] : rawKey;
+    if (chave && this.orderAccess.isValid(orderId, chave)) {
+      return;
+    }
+
+    const bearer = extractBearerToken(
+      request.headers?.authorization as string | undefined
+    );
+    if (!bearer) {
+      throw new UnauthorizedException(
+        "Faça login ou use o acesso do pedido para ver os detalhes."
+      );
+    }
+    const user = await this.authService.verifyToken(bearer);
+    if (STAFF_ROLES.includes(user.role)) {
+      return;
+    }
+    if (user.role === "cliente" && user.cpf) {
+      const pedido = await this.ordersService.findOrder(orderId);
+      const digitos = (v: string | null) => (v ?? "").replace(/D/g, "");
+      if (
+        digitos(pedido.customer_cpf) !== "" &&
+        digitos(pedido.customer_cpf) === digitos(user.cpf)
+      ) {
+        return;
+      }
+    }
+    throw new NotFoundException("Pedido nao encontrado.");
   }
 
   // Fila de pedidos da filial: só operador, gerente e empresa (S3-14 / S3-16).
@@ -179,9 +226,11 @@ export class OrdersController {
 
   @Get(":id/notifications")
   async getNotifications(
+    @Req() request: { headers: Record<string, string> },
     @Param("id") id: string
   ): Promise<{ notifications: NotificationRow[] }> {
     const orderId = this.parseId(id);
+    await this.authorizeOrderRead(request, orderId);
     const notifications = await this.ordersService.listNotifications(orderId);
     return { notifications };
   }
@@ -195,8 +244,12 @@ export class OrdersController {
   }
 
   @Get(":id")
-  async getOrder(@Param("id") id: string): Promise<{ order: OrderView }> {
+  async getOrder(
+    @Req() request: { headers: Record<string, string> },
+    @Param("id") id: string
+  ): Promise<{ order: OrderView }> {
     const orderId = this.parseId(id);
+    await this.authorizeOrderRead(request, orderId);
     const order = await this.ordersService.findOrder(orderId);
     return { order };
   }

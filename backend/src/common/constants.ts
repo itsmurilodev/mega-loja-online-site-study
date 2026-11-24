@@ -164,6 +164,8 @@ export interface OrderView {
   origin_store_id?: number | null;
   origin_store_name?: string | null;
   transfer_eta_days?: number | null;
+  /** Chave de acesso do pedido: só vem na resposta da compra (privacidade). */
+  access_token?: string;
 }
 
 export interface NotificationRow {
